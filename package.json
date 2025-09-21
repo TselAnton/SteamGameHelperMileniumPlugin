@@ -1,0 +1,19 @@
+{
+  "name": "steam-game-review-writer",
+  "version": "1.0.0",
+  "description": "Steam Game Review Writer Plugin for Millennium",
+  "main": ".millennium/Dist/index.js",
+  "scripts": {
+    "build": "echo 'No build process needed for this plugin'",
+    "install": "echo 'Plugin ready for Millennium'"
+  },
+  "keywords": [
+    "steam",
+    "plugin",
+    "millennium",
+    "review",
+    "games"
+  ],
+  "author": "Steam Game Review Writer",
+  "license": "MIT"
+}

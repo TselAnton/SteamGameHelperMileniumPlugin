@@ -1,0 +1,6 @@
+{
+    "max_review_length": 5000,
+    "reviews_directory": "reviews",
+    "auto_save": true,
+    "show_character_count": true
+}

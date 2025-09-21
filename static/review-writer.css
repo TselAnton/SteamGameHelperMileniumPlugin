@@ -1,0 +1,287 @@
+/* Steam Game Review Writer Plugin Styles */
+
+/* Review Writer Button in Game Context Menu */
+.review-writer-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    color: #b8b6b4;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    font-size: 13px;
+}
+
+.review-writer-menu-item:hover {
+    background-color: #1b2838;
+    color: #ffffff;
+}
+
+.review-writer-menu-item .icon {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+/* Review Writer Button in Game Actions - Steam Style */
+.review-writer-button {
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+    margin-left: 3px;
+    margin-right: 3px;
+    width: auto;
+    min-width: 40px;
+}
+
+.review-writer-button:hover {
+    background: var(--color-accent);
+    color: var(--color-text);
+    border-color: var(--color-accent);
+}
+
+.review-writer-button:active {
+    background: var(--color-accent-hover);
+    transform: translateY(1px);
+}
+
+.review-writer-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-accent-focus);
+}
+
+/* Modal Dialog Styles - Steam Theme */
+.review-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999999;
+    backdrop-filter: blur(4px);
+}
+
+.review-modal {
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.review-modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.review-modal-title {
+    color: var(--color-text);
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.review-modal-close {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 3px;
+    transition: all 0.2s;
+}
+
+.review-modal-close:hover {
+    color: var(--color-text);
+    background: var(--color-accent);
+}
+
+.review-modal-body {
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.review-textarea {
+    width: 100%;
+    min-height: 300px;
+    background: var(--color-base);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    color: var(--color-text);
+    padding: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.review-textarea:focus {
+    border-color: var(--color-accent);
+}
+
+.review-textarea::placeholder {
+    color: var(--color-text-secondary);
+}
+
+.review-character-count {
+    margin-top: 8px;
+    text-align: right;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+}
+
+.review-character-count.warning {
+    color: var(--color-warning);
+}
+
+.review-character-count.error {
+    color: var(--color-error);
+}
+
+.review-modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.review-modal-button {
+    padding: 8px 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 80px;
+    font-family: inherit;
+}
+
+.review-modal-button.primary {
+    background: var(--color-base);
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+}
+
+.review-modal-button.primary:hover {
+    background: var(--color-accent);
+    color: var(--color-base);
+}
+
+.review-modal-button.secondary {
+    background: var(--color-base);
+    color: var(--color-text-secondary);
+    border-color: var(--color-border);
+}
+
+.review-modal-button.secondary:hover {
+    background: var(--color-accent);
+    color: var(--color-text);
+}
+
+.review-modal-button.danger {
+    background: var(--color-base);
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
+.review-modal-button.danger:hover {
+    background: var(--color-error);
+    color: var(--color-base);
+}
+
+.review-modal-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.review-modal-button:disabled:hover {
+    background: inherit;
+    color: inherit;
+}
+
+/* Notification Styles */
+.review-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 16px;
+    border-radius: 4px;
+    color: #ffffff;
+    font-size: 13px;
+    z-index: 1000000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    animation: slideIn 0.3s ease-out;
+}
+
+.review-notification.success {
+    background: #28a745;
+}
+
+.review-notification.error {
+    background: #dc3545;
+}
+
+.review-notification.warning {
+    background: #ffc107;
+    color: #1b2838;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Game Info Display */
+.review-game-info {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--color-base);
+    border-radius: 4px;
+    border-left: 3px solid var(--color-accent);
+}
+
+.review-game-name {
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+}
+
+.review-game-id {
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    margin: 0;
+}
