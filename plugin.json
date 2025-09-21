@@ -1,0 +1,8 @@
+{
+    "$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
+
+    "name": "steam-game-helper",
+    "common_name": "Steam Game Helper",
+    "description": "Write and save personal game reviews locally",
+    "version": "1.0.0"
+}
