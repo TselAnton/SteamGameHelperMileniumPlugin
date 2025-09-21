@@ -1,9 +1,0 @@
-{
-    "$schema": "https://raw.githubusercontent.com/SteamClientHomebrew/Millennium/main/src/sys/plugin-schema.json",
-
-    "name": "steam-game-review-writer",
-    "common_name": "Game Review Writer",
-    "description": "Allows writing and saving custom game reviews to local files",
-    "version": "1.0.0",
-    "include": ["config.json", "static", ".millennium"]
-}
