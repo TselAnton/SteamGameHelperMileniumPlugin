@@ -19,14 +19,22 @@ def load_reviews_db():
     """Загрузить базу данных обзоров из файла"""
     global reviews_db
     if os.path.exists(get_reviews_db_fname()):
-        with open(get_reviews_db_fname(), "rt", encoding="utf-8") as fp:
-            reviews_db = json.load(fp)
+        try:
+            with open(get_reviews_db_fname(), "rt", encoding="utf-8") as fp:
+                reviews_db = json.load(fp)
+        except Exception as e:
+            logger.log(f"Error loading reviews database: {e}")
+            reviews_db = {}
 
 def save_reviews_db():
     """Сохранить базу данных обзоров в файл"""
     global reviews_db
-    with open(get_reviews_db_fname(), "wt", encoding="utf-8") as fp:
-        json.dump(reviews_db, fp, ensure_ascii=False, indent=2)
+    try:
+        with open(get_reviews_db_fname(), "wt", encoding="utf-8") as fp:
+            logger.log(f"Saving reviews database: {reviews_db}")
+            json.dump(reviews_db, fp, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.log(f"Error saving reviews database: {e}")
 
 ##############
 # INTERFACES #
@@ -44,7 +52,10 @@ class Backend:
         """Получить обзор игры по app_id"""
         logger.log(f"get_review() called for app {app_id}")
         if str(app_id) in reviews_db:
-            return json.dumps(reviews_db[str(app_id)], ensure_ascii=False)
+            result = json.dumps(reviews_db[str(app_id)], ensure_ascii=False)
+            logger.log(f"Returning review data: {result}")
+            return result
+        logger.log("No review found, returning empty object")
         return json.dumps({}, ensure_ascii=False)
 
     @staticmethod

@@ -33,17 +33,35 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
     const [status, setStatus] = useState<string>('IN_PROGRESS');
     const [loading, setLoading] = useState<boolean>(true);
     const [saving, setSaving] = useState<boolean>(false);
+    const [saved, setSaved] = useState<boolean>(false);
+    const [deleted, setDeleted] = useState<boolean>(false);
+    const [originalData, setOriginalData] = useState<any>(null);
 
     // Загружаем существующий обзор при открытии модального окна
     useEffect(() => {
         const loadReview = async () => {
             try {
                 const reviewData = await get_review({ app_id: appId });
-                const data = JSON.parse(reviewData);
+                await debug_log({ message: `Raw review data received: ${reviewData}` });
                 
-                if (data.review) setReviewText(data.review);
-                if (data.rating) setRating(data.rating);
-                if (data.status) setStatus(data.status);
+                const data = JSON.parse(reviewData);
+                await debug_log({ message: `Parsed review data: ${JSON.stringify(data)}` });
+                
+                // Сохраняем оригинальные данные для сравнения
+                setOriginalData(data);
+                
+                if (data.review) {
+                    setReviewText(data.review);
+                    await debug_log({ message: `Set review text: ${data.review}` });
+                }
+                if (data.rating) {
+                    setRating(data.rating);
+                    await debug_log({ message: `Set rating: ${data.rating}` });
+                }
+                if (data.status) {
+                    setStatus(data.status);
+                    await debug_log({ message: `Set status: ${data.status}` });
+                }
             } catch (error) {
                 await debug_log({ message: `Error loading review: ${error}` });
             } finally {
@@ -64,6 +82,8 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                 status: status
             };
 
+            await debug_log({ message: `Saving review data: ${JSON.stringify(reviewData)}` });
+
             const success = await save_review({ 
                 app_id: appId, 
                 review_data: JSON.stringify(reviewData) 
@@ -71,7 +91,10 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
 
             if (success) {
                 await debug_log({ message: "Review saved successfully" });
-                onClose();
+                setSaved(true);
+                setDeleted(false);
+                // Обновляем оригинальные данные
+                setOriginalData({ review: reviewText, rating: rating, status: status });
             } else {
                 await debug_log({ message: "Failed to save review" });
             }
@@ -88,12 +111,43 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
             const success = await delete_review({ app_id: appId });
             if (success) {
                 await debug_log({ message: "Review deleted successfully" });
-                onClose();
+                setDeleted(true);
+                setSaved(false);
+                // Очищаем поля
+                setReviewText("");
+                setRating(0);
+                setStatus('IN_PROGRESS');
+                setOriginalData({});
             }
         } catch (error) {
             await debug_log({ message: `Error deleting review: ${error}` });
         }
     };
+
+    // Получаем цвет для ползунка рейтинга
+    const getRatingColor = (rating: number) => {
+        if (rating <= 2.0) return '#dc3545'; // красный
+        if (rating <= 3.5) return '#ffc107'; // желтый
+        return '#28a745'; // зеленый
+    };
+
+    // Проверяем, были ли внесены изменения
+    const hasChanges = () => {
+        if (!originalData) return true;
+        return (
+            reviewText !== (originalData.review || '') ||
+            rating !== (originalData.rating || 0) ||
+            status !== (originalData.status || 'IN_PROGRESS')
+        );
+    };
+
+    // Сбрасываем состояние при изменениях
+    useEffect(() => {
+        if (hasChanges()) {
+            setSaved(false);
+            setDeleted(false);
+        }
+    }, [reviewText, rating, status]);
 
     if (loading) {
         return (
@@ -135,25 +189,29 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                         Rating (1-5):
                     </label>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        {[1, 2, 3, 4, 5].map((star) => (
-                            <button
-                                key={star}
-                                onClick={() => setRating(star)}
-                                style={{
-                                    background: rating >= star ? '#ffd700' : '#ddd',
-                                    border: 'none',
-                                    borderRadius: '50%',
-                                    width: '30px',
-                                    height: '30px',
-                                    cursor: 'pointer',
-                                    fontSize: '16px'
-                                }}
-                            >
-                                ★
-                            </button>
-                        ))}
-                        <span style={{ marginLeft: '10px' }}>
-                            {rating > 0 ? `${rating}/5` : 'Not rated'}
+                        <input
+                            type="range"
+                            min="1"
+                            max="5"
+                            step="0.5"
+                            value={rating || 1}
+                            onChange={(e) => setRating(parseFloat(e.target.value))}
+                            style={{
+                                flex: 1,
+                                height: '20px',
+                                background: `linear-gradient(to right, ${getRatingColor(rating || 1)} 0%, ${getRatingColor(rating || 1)} ${((rating || 1) - 1) / 4 * 100}%, #ddd ${((rating || 1) - 1) / 4 * 100}%, #ddd 100%)`,
+                                outline: 'none',
+                                borderRadius: '10px',
+                                cursor: 'pointer'
+                            }}
+                        />
+                        <span style={{ 
+                            minWidth: '60px', 
+                            textAlign: 'center',
+                            fontWeight: 'bold',
+                            color: getRatingColor(rating || 1)
+                        }}>
+                            {rating > 0 ? `${rating}/5` : '1/5'}
                         </span>
                     </div>
                 </div>
@@ -183,48 +241,43 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                 </div>
 
                 {/* Кнопки управления */}
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                    <DialogButton 
-                        onClick={handleDelete}
-                        style={{ 
-                            backgroundColor: '#dc3545', 
-                            color: 'white',
-                            border: 'none',
-                            padding: '8px 16px',
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        Delete Review
-                    </DialogButton>
-                    <DialogButton 
-                        onClick={onClose}
-                        style={{ 
-                            backgroundColor: '#6c757d', 
-                            color: 'white',
-                            border: 'none',
-                            padding: '8px 16px',
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        Cancel
-                    </DialogButton>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', alignItems: 'center' }}>
                     <DialogButton 
                         onClick={handleSave}
-                        disabled={saving}
+                        disabled={saving || !hasChanges()}
                         style={{ 
-                            backgroundColor: '#007bff', 
+                            backgroundColor: saved ? '#28a745' : '#007bff', 
                             color: 'white',
                             border: 'none',
                             padding: '8px 16px',
                             borderRadius: '4px',
-                            cursor: saving ? 'not-allowed' : 'pointer',
-                            opacity: saving ? 0.6 : 1
+                            cursor: (saving || !hasChanges()) ? 'not-allowed' : 'pointer',
+                            opacity: (saving || !hasChanges()) ? 0.6 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
                         }}
                     >
-                        {saving ? 'Saving...' : 'Save'}
+                        {saving ? 'Saving...' : saved ? '✓ Saved' : 'Save'}
                     </DialogButton>
+                    <button 
+                        onClick={handleDelete}
+                        style={{ 
+                            backgroundColor: deleted ? '#28a745' : '#dc3545', 
+                            color: 'white',
+                            border: 'none',
+                            padding: '8px 12px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                        }}
+                        title={deleted ? "Review deleted" : "Delete review"}
+                    >
+                        {deleted ? '🗑️✓' : '🗑️'}
+                    </button>
                 </div>
             </div>
         </ModalRoot>
@@ -315,9 +368,8 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                                 showModal(
                                     <ReviewModal 
                                         appId={appId} 
-                                        onClose={async () => {
-                                            await debug_log({ message: "Review modal closed" });
-                                            // Модальное окно закроется автоматически
+                                        onClose={() => {
+                                            // Модальное окно закроется автоматически без сохранения
                                         }} 
                                     />,
                                     popup.m_popup.window, 
