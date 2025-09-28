@@ -6,6 +6,8 @@ import type * as globals from "./sharedjscontextglobals";
 declare const g_PopupManager: globals.PopupManager;
 declare const MainWindowBrowserManager: globals.MainWindowBrowserManager;
 declare const App: globals.App;
+declare const collectionStore: any;
+declare const SteamUIStore: any;
 
 // Backend функции для работы с обзорами
 const get_review = callable<[{ app_id: number }], string>('Backend.get_review');
@@ -93,6 +95,250 @@ const GAME_STATUS_OPTIONS = [
     { value: 'FINISHED', label: 'Пройдена' },
     { value: 'SKIPPED', label: 'Пропущена' }
 ];
+
+// Константы для колеса фортуны
+const WHEEL_SPIN_DURATION = 10000; // 10 секунд в миллисекундах
+
+// Интерфейс для игры
+interface GameInfo {
+    appid: number;
+    display_name: string;
+    header_image?: string;
+}
+
+// Компонент колеса фортуны
+const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = ({ games, onClose }) => {
+    const [isSpinning, setIsSpinning] = useState<boolean>(false);
+    const [selectedGame, setSelectedGame] = useState<GameInfo | null>(null);
+    const [wheelRotation, setWheelRotation] = useState<number>(0);
+    const [showResult, setShowResult] = useState<boolean>(false);
+
+    const spinWheel = () => {
+        if (isSpinning || games.length === 0) return;
+        
+        setIsSpinning(true);
+        setShowResult(false);
+        setSelectedGame(null);
+        
+        // Генерируем случайное количество оборотов (от 15 до 20 полных оборотов для еще большего ускорения)
+        const randomRotations = Math.random() * 8 + 15;
+        const finalRotation = wheelRotation + (randomRotations * 360);
+        
+        setWheelRotation(finalRotation);
+        
+        // Вычисляем, какой сектор окажется у стрелки (90 градусов, верхняя точка)
+        // Нормализуем финальный угол поворота к диапазону 0-360
+        const normalizedRotation = finalRotation % 360;
+        
+        // Поскольку колесо поворачивается по часовой стрелке, а стрелка неподвижна в позиции 90 градусов,
+        // нужно вычислить, какой сектор окажется в этой позиции
+        // Секторы начинаются с 0 градусов, поэтому нужно учесть смещение
+        const arrowAngle = (270 - normalizedRotation + 360) % 360;
+        
+        // Определяем индекс сектора, который окажется у стрелки
+        const sectorIndex = Math.floor(arrowAngle / anglePerGame) % games.length;
+        const chosenGame = games[sectorIndex];
+        
+        // Показываем результат после завершения анимации
+        setTimeout(() => {
+            setSelectedGame(chosenGame);
+            setShowResult(true);
+            setIsSpinning(false);
+        }, WHEEL_SPIN_DURATION);
+    };
+
+    const viewGame = () => {
+        if (selectedGame) {
+            SteamUIStore.Navigate(`/library/app/${selectedGame.appid}`);
+            onClose();
+        }
+    };
+
+    // Вычисляем угол для каждой игры
+    const anglePerGame = 360 / games.length;
+    
+    return (
+        <ModalRoot closeModal={onClose}>
+            <div style={{ 
+                padding: '20px', 
+                minWidth: '800px', 
+                minHeight: '600px',
+                display: 'flex', 
+                flexDirection: 'column',
+                alignItems: 'center'
+            }}>
+                <h2 style={{ marginBottom: '20px' }}>Fortune Wheel - Choose Your Game!</h2>
+                
+                <div style={{ 
+                    display: 'flex', 
+                    width: '100%', 
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }}>
+                    {/* Колесо фортуны */}
+                    <div style={{ 
+                        width: '60%', 
+                        display: 'flex', 
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        position: 'relative'
+                    }}>
+                        <div style={{
+                            width: '400px',
+                            height: '400px',
+                            borderRadius: '50%',
+                            border: '8px solid #333',
+                            position: 'relative',
+                            overflow: 'hidden',
+                            transform: `rotate(${wheelRotation}deg)`,
+                            transition: isSpinning ? `transform ${WHEEL_SPIN_DURATION}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)` : 'none',
+                            background: 'conic-gradient(' + 
+                                games.map((_, index) => {
+                                    const hue = (index * 360) / games.length;
+                                    return `hsl(${hue}, 65%, 55%) ${index * anglePerGame}deg ${(index + 1) * anglePerGame}deg`;
+                                }).join(', ') + ')'
+                        }}>
+                            {/* Секторы с названиями игр */}
+                            {games.map((game, index) => {
+                                const angle = index * anglePerGame;
+                                const middleAngle = angle + anglePerGame / 2; // Центр сектора
+                                const isUpsideDown = middleAngle > 90 && middleAngle < 270;
+                                
+                                return (
+                                    <div
+                                        key={game.appid}
+                                        style={{
+                                            position: 'absolute',
+                                            width: '200px', // Радиус до центра окружности
+                                            height: '2px',
+                                            transformOrigin: '0% 50%',
+                                            transform: `rotate(${middleAngle}deg)`,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            left: '50%',
+                                            top: '50%'
+                                        }}
+                                    >
+                                        <span style={{
+                                            fontSize: '11px',
+                                            fontWeight: 'bold',
+                                            color: 'white',
+                                            textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+                                            transform: isUpsideDown ? 'rotate(180deg)' : 'none',
+                                            maxWidth: '80px',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                            textAlign: 'center',
+                                            position: 'absolute',
+                                            left: '130px' // Позиция текста на радиусе
+                                        }}>
+                                            {game.display_name}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        
+                        {/* Стрелка */}
+                        <div style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            width: '0',
+                            height: '0',
+                            borderTop: '25px solidrgb(243, 179, 105)',
+                            borderLeft: '15px solid transparent',
+                            borderRight: '15px solid transparent',
+                            zIndex: 10
+                        }} />
+                    </div>
+                    
+                    {/* Результат */}
+                    <div style={{ 
+                        width: '35%', 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: '300px'
+                    }}>
+                        {showResult && selectedGame ? (
+                            <div style={{ textAlign: 'center' }}>
+                                <h3 style={{ marginBottom: '15px', color: '#28a745' }}>Selected Game!</h3>
+                                {selectedGame.header_image && (
+                                    <img 
+                                        src={selectedGame.header_image} 
+                                        alt={selectedGame.display_name}
+                                        style={{
+                                            width: '200px',
+                                            height: '100px',
+                                            objectFit: 'cover',
+                                            borderRadius: '8px',
+                                            marginBottom: '10px'
+                                        }}
+                                    />
+                                )}
+                                <h4 style={{ marginBottom: '20px' }}>{selectedGame.display_name}</h4>
+                            </div>
+                        ) : (
+                            <div style={{ textAlign: 'center', color: '#666' }}>
+                                <h3>Ready to spin?</h3>
+                                <p>Click the Spin button to choose a random game from your collection!</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                
+                {/* Кнопки управления */}
+                <div style={{ 
+                    display: 'flex', 
+                    gap: '15px', 
+                    marginTop: '20px',
+                    justifyContent: 'center'
+                }}>
+                    <DialogButton 
+                        onClick={spinWheel}
+                        disabled={isSpinning || games.length === 0}
+                        style={{ 
+                            backgroundColor: isSpinning ? '#6c757d' : '#007bff', 
+                            color: 'white',
+                            border: 'none',
+                            padding: '10px 20px',
+                            borderRadius: '4px',
+                            cursor: isSpinning ? 'not-allowed' : 'pointer',
+                            opacity: isSpinning ? 0.6 : 1,
+                            fontSize: '16px',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        {isSpinning ? 'Spinning...' : 'Spin'}
+                    </DialogButton>
+                    
+                    {showResult && selectedGame && (
+                        <DialogButton 
+                            onClick={viewGame}
+                            style={{ 
+                                backgroundColor: '#28a745', 
+                                color: 'white',
+                                border: 'none',
+                                padding: '10px 20px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '16px',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            View Game
+                        </DialogButton>
+                    )}
+                </div>
+            </div>
+        </ModalRoot>
+    );
+};
 
 // Компонент модального окна для написания обзора
 const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, onClose }) => {
@@ -523,8 +769,119 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
             } else {
                 await debug_log({ message: "No appId found in path" });
             }
+        } else if (currentPath.startsWith("/library/collection/")) {
+            await debug_log({ message: "Collection page detected, processing..." });
+            
+            const collectionIdMatch = currentPath.match(/\/library\/collection\/(.+)/);
+            await debug_log({ message: `CollectionId match result: ${JSON.stringify(collectionIdMatch)}` });
+            
+            if (collectionIdMatch) {
+                const collectionId = collectionIdMatch[1];
+                await debug_log({ message: `Extracted collectionId: ${collectionId}` });
+                
+                try {
+                    // Ищем кнопку настроек коллекции (аналогично кнопке настроек игры)
+                    await debug_log({ message: "Looking for collection options button..." });
+                    
+                    const collectionOptionsButton = await WaitForElement(`div.${findModule(e => e.CollectionOptions).CollectionOptions}`, popup.m_popup.document);
+                    
+                    await debug_log({ message: `Collection options button found: ${!!collectionOptionsButton}` });
+                    
+                    if (collectionOptionsButton) {
+                        // Проверяем, не существует ли уже кнопка колеса фортуны
+                        const existingWheelButton = collectionOptionsButton.querySelector('button.steam-game-helper-wheel-button');
+                        await debug_log({ message: `Existing wheel button check: ${!!existingWheelButton}` });
+                        
+                        if (!existingWheelButton) {
+                            await debug_log({ message: "Creating fortune wheel button..." });
+                            
+                            // Создаем кнопку колеса фортуны
+                            const wheelButton = popup.m_popup.document.createElement("div");
+                            render(
+                                <DialogButton 
+                                    className="steam-game-helper-wheel-button" 
+                                    style={{
+                                        width: "40px", 
+                                        marginLeft: "3px", 
+                                        marginRight: "3px",
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontSize: '12px',
+                                        fontWeight: 'bold'
+                                    }}
+                                >
+                                    🎯
+                                </DialogButton>, 
+                                wheelButton
+                            );
+                            
+                            collectionOptionsButton.insertBefore(wheelButton, collectionOptionsButton.firstChild.nextSibling);
+                            
+                            await debug_log({ message: "Fortune wheel button inserted successfully" });
+
+                            // Добавляем обработчик клика
+                            wheelButton.addEventListener("click", async () => {
+                                await debug_log({ message: `Fortune wheel button clicked for collection: ${collectionId}` });
+                                
+                                try {
+                                    // Получаем список игр из коллекции
+                                    const collection = collectionStore.GetCollection(collectionId);
+                                    await debug_log({ message: `Collection found: ${!!collection}` });
+                                    
+                                    if (collection && collection.allApps) {
+                                        const games: GameInfo[] = collection.allApps.map((app: any) => ({
+                                            appid: app.appid,
+                                            display_name: app.display_name,
+                                            header_image: app.header_image
+                                        }));
+                                        
+                                        await debug_log({ message: `Found ${games.length} games in collection` });
+                                        
+                                        if (games.length > 0) {
+                                            showModal(
+                                                <FortuneWheelModal 
+                                                    games={games} 
+                                                    onClose={() => {
+                                                        // Модальное окно закроется автоматически
+                                                    }} 
+                                                />,
+                                                popup.m_popup.window, 
+                                                { 
+                                                    strTitle: "Fortune Wheel", 
+                                                    bHideMainWindowForPopouts: false, 
+                                                    bForcePopOut: true, 
+                                                    popupHeight: 734, 
+                                                    popupWidth: 990 
+                                                }
+                                            );
+                                        } else {
+                                            await debug_log({ message: "Collection is empty, cannot show fortune wheel" });
+                                        }
+                                    } else {
+                                        await debug_log({ message: "Collection not found or has no games" });
+                                    }
+                                } catch (error) {
+                                    await debug_log({ message: `Error getting collection games: ${error}` });
+                                }
+                            });
+                            
+                            await debug_log({ message: "Fortune wheel button click handler added" });
+                        } else {
+                            await debug_log({ message: "Fortune wheel button already exists, skipping creation" });
+                        }
+                    } else {
+                        await debug_log({ message: "Collection options button not found" });
+                    }
+                } catch (error) {
+                    await debug_log({ message: `Error processing collection page: ${error}` });
+                }
+            } else {
+                await debug_log({ message: "No collectionId found in path" });
+            }
         } else {
-            await debug_log({ message: "Not a game page, skipping" });
+            await debug_log({ message: "Not a game or collection page, skipping" });
         }
     });
     
