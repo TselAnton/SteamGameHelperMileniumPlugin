@@ -19,6 +19,74 @@ const WaitForElement = async (sel: string, parent = document) =>
 const WaitForElementTimeout = async (sel: string, parent = document, timeOut = 1000) =>
 	[...(await Millennium.findElement(parent, sel, timeOut))][0];
 
+// Функция для правильного декодирования UTF-8 строк
+const decodeUtf8String = (str: string): string => {
+    try {
+        // Если строка уже корректно декодирована, возвращаем как есть
+        if (typeof str !== 'string') return str;
+        
+        // Проверяем, содержит ли строка Unicode escape-последовательности
+        if (str.includes('\\u')) {
+            // Декодируем Unicode escape-последовательности
+            return str.replace(/\\u[\dA-F]{4}/gi, (match) => {
+                return String.fromCharCode(parseInt(match.replace(/\\u/g, ''), 16));
+            });
+        }
+        
+        // Если нет escape-последовательностей, возвращаем как есть
+        return str;
+    } catch (error) {
+        console.error('Error decoding UTF-8 string:', error);
+        return str; // Возвращаем оригинальную строку в случае ошибки
+    }
+};
+
+// Функция для принудительного кодирования строки в UTF-8
+const forceUtf8Encoding = (str: string): string => {
+    try {
+        if (typeof str !== 'string') return str;
+        
+        // Попробуем перекодировать строку через TextEncoder/TextDecoder
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder('utf-8');
+        const bytes = encoder.encode(str);
+        return decoder.decode(bytes);
+    } catch (error) {
+        console.error('Error forcing UTF-8 encoding:', error);
+        return str;
+    }
+};
+
+// Функция для исправления искаженной кодировки (типа "Ð¢ÐµÑÑ" -> "тест")
+const fixCorruptedEncoding = (str: string): string => {
+    try {
+        if (typeof str !== 'string') return str;
+        
+        // Проверяем, содержит ли строка типичные символы искаженной кодировки
+        if (str.includes('Ð') || str.includes('Ñ') || str.includes('Ð°') || str.includes('Ð¸')) {
+            // Попробуем исправить через перекодировку Latin-1 -> UTF-8
+            const bytes = new Uint8Array(str.length);
+            for (let i = 0; i < str.length; i++) {
+                bytes[i] = str.charCodeAt(i) & 0xFF; // Получаем байт
+            }
+            
+            const decoder = new TextDecoder('utf-8');
+            const fixed = decoder.decode(bytes);
+            
+            // Проверяем, стал ли результат лучше (содержит ли кириллицу)
+            const cyrillicPattern = /[а-яё]/i;
+            if (cyrillicPattern.test(fixed) && !cyrillicPattern.test(str)) {
+                return fixed;
+            }
+        }
+        
+        return str;
+    } catch (error) {
+        console.error('Error fixing corrupted encoding:', error);
+        return str;
+    }
+};
+
 // Опции статуса игры с русской локализацией
 const GAME_STATUS_OPTIONS = [
     { value: 'IN_PROGRESS', label: 'В процессе' },
@@ -51,8 +119,18 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                 setOriginalData(data);
                 
                 if (data.review) {
-                    setReviewText(data.review);
-                    await debug_log({ message: `Set review text: ${data.review}` });
+                    // Применяем все методы декодирования последовательно
+                    const step1 = decodeUtf8String(data.review);
+                    const step2 = fixCorruptedEncoding(step1);
+                    const step3 = forceUtf8Encoding(step2);
+                    
+                    await debug_log({ message: `Original review text: ${data.review}` });
+                    await debug_log({ message: `After decodeUtf8String: ${step1}` });
+                    await debug_log({ message: `After fixCorruptedEncoding: ${step2}` });
+                    await debug_log({ message: `After forceUtf8Encoding: ${step3}` });
+                    
+                    setReviewText(step3);
+                    await debug_log({ message: `Final review text set: ${step3}` });
                 }
                 if (data.rating) {
                     setRating(data.rating);

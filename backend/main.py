@@ -3,6 +3,7 @@ logger = PluginUtils.Logger()
 
 import json
 import os
+from __main__ import PLUGIN_BASE_DIR
 
 # База данных обзоров игр
 reviews_db = {}
@@ -52,8 +53,33 @@ class Backend:
         """Получить обзор игры по app_id"""
         logger.log(f"get_review() called for app {app_id}")
         if str(app_id) in reviews_db:
-            result = json.dumps(reviews_db[str(app_id)], ensure_ascii=False)
-            logger.log(f"Returning review data: {result}")
+            data = reviews_db[str(app_id)]
+            
+            # Логируем исходные данные
+            logger.log(f"Raw data from database: {data}")
+            
+            # Убеждаемся, что строки правильно кодированы в UTF-8
+            if 'review' in data and data['review']:
+                original_review = data['review']
+                logger.log(f"Original review text: {repr(original_review)}")
+                logger.log(f"Original review type: {type(original_review)}")
+                
+                # Попробуем разные способы кодирования
+                try:
+                    # Способ 1: Убеждаемся, что это UTF-8 строка
+                    if isinstance(original_review, str):
+                        # Кодируем в байты и декодируем обратно для проверки
+                        encoded = original_review.encode('utf-8')
+                        decoded = encoded.decode('utf-8')
+                        logger.log(f"UTF-8 re-encoded review: {repr(decoded)}")
+                        data['review'] = decoded
+                    
+                except Exception as e:
+                    logger.log(f"Error re-encoding review text: {e}")
+            
+            result = json.dumps(data, ensure_ascii=False, separators=(',', ':'))
+            logger.log(f"Final JSON result: {result}")
+            logger.log(f"Final JSON result type: {type(result)}")
             return result
         logger.log("No review found, returning empty object")
         return json.dumps({}, ensure_ascii=False)
@@ -62,13 +88,38 @@ class Backend:
     def save_review(app_id, review_data):
         """Сохранить обзор игры"""
         logger.log(f"save_review() called for app {app_id}")
+        logger.log(f"Raw review_data received: {repr(review_data)}")
+        logger.log(f"Raw review_data type: {type(review_data)}")
+        
         try:
+            # Парсим JSON данные
             data = json.loads(review_data)
+            logger.log(f"Parsed review data: {data}")
+            
+            # Проверяем и обрабатываем текст рецензии
+            if 'review' in data and data['review']:
+                original_text = data['review']
+                logger.log(f"Original review text: {repr(original_text)}")
+                
+                # Убеждаемся, что текст правильно кодирован в UTF-8
+                try:
+                    if isinstance(original_text, str):
+                        # Проверяем кодировку
+                        encoded = original_text.encode('utf-8')
+                        decoded = encoded.decode('utf-8')
+                        data['review'] = decoded
+                        logger.log(f"UTF-8 processed review text: {repr(decoded)}")
+                except Exception as e:
+                    logger.log(f"Error processing review text encoding: {e}")
+            
+            # Сохраняем в базу данных
             reviews_db[str(app_id)] = data
             save_reviews_db()
+            logger.log("Review saved successfully to database")
             return True
         except Exception as e:
             logger.log(f"Error saving review: {e}")
+            logger.log(f"Exception type: {type(e)}")
             return False
 
     @staticmethod
