@@ -138,7 +138,7 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
         // Определяем индекс сектора, который окажется у стрелки
         const sectorIndex = Math.floor(arrowAngle / anglePerGame) % games.length;
         const chosenGame = games[sectorIndex];
-        
+ 
         // Показываем результат после завершения анимации
         setTimeout(() => {
             setSelectedGame(chosenGame);
@@ -195,13 +195,21 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                             background: 'conic-gradient(' + 
                                 games.map((_, index) => {
                                     const hue = (index * 360) / games.length;
-                                    return `hsl(${hue}, 65%, 55%) ${index * anglePerGame}deg ${(index + 1) * anglePerGame}deg`;
+                                    return `hsl(${hue}, 63%, 52%) ${index * anglePerGame}deg ${(index + 1) * anglePerGame}deg`;
                                 }).join(', ') + ')'
                         }}>
                             {/* Секторы с названиями игр */}
                             {games.map((game, index) => {
                                 const angle = index * anglePerGame;
                                 const middleAngle = angle + anglePerGame / 2; // Центр сектора
+                                const middleAngleRad = (middleAngle * Math.PI) / 180; // Конвертируем в радианы
+                                
+                                // Вычисляем позицию текста на основе угла (радиус 130px от центра)
+                                const radius = 130;
+                                const textX = 200 + Math.cos(middleAngleRad) * radius; // 200 - центр колеса
+                                const textY = 200 + Math.sin(middleAngleRad) * radius; // 200 - центр колеса
+                                
+                                // Определяем, нужно ли переворачивать текст для читаемости
                                 const isUpsideDown = middleAngle > 90 && middleAngle < 270;
                                 
                                 return (
@@ -209,15 +217,13 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                                         key={game.appid}
                                         style={{
                                             position: 'absolute',
-                                            width: '200px', // Радиус до центра окружности
-                                            height: '2px',
-                                            transformOrigin: '0% 50%',
-                                            transform: `rotate(${middleAngle}deg)`,
+                                            left: `${textX}px`,
+                                            top: `${textY}px`,
+                                            transform: `translate(-50%, -50%) rotate(${isUpsideDown ? middleAngle + 180 : middleAngle}deg)`,
+                                            transformOrigin: 'center',
                                             display: 'flex',
                                             alignItems: 'center',
-                                            justifyContent: 'center',
-                                            left: '50%',
-                                            top: '50%'
+                                            justifyContent: 'center'
                                         }}
                                     >
                                         <span style={{
@@ -225,14 +231,11 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                                             fontWeight: 'bold',
                                             color: 'white',
                                             textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
-                                            transform: isUpsideDown ? 'rotate(180deg)' : 'none',
                                             maxWidth: '80px',
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
                                             whiteSpace: 'nowrap',
-                                            textAlign: 'center',
-                                            position: 'absolute',
-                                            left: '130px' // Позиция текста на радиусе
+                                            textAlign: 'center'
                                         }}>
                                             {game.display_name}
                                         </span>
@@ -249,10 +252,10 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                             transform: 'translateX(-50%)',
                             width: '0',
                             height: '0',
-                            borderTop: '25px solidrgb(243, 179, 105)',
+                            borderTop: '25px solid rgb(243, 179, 105)',
                             borderLeft: '15px solid transparent',
                             borderRight: '15px solid transparent',
-                            zIndex: 10
+                            zIndex: 100
                         }} />
                     </div>
                     
