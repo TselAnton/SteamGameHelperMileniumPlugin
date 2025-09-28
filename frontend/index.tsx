@@ -91,7 +91,7 @@ const fixCorruptedEncoding = (str: string): string => {
 const GAME_STATUS_OPTIONS = [
     { value: 'IN_PROGRESS', label: 'В процессе' },
     { value: 'FINISHED', label: 'Пройдена' },
-    { value: 'SKIPPED', label: 'Дропнута' }
+    { value: 'SKIPPED', label: 'Пропущена' }
 ];
 
 // Компонент модального окна для написания обзора
@@ -99,6 +99,8 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
     const [reviewText, setReviewText] = useState<string>("");
     const [rating, setRating] = useState<number>(0);
     const [status, setStatus] = useState<string>('IN_PROGRESS');
+    const [finishedDate, setFinishedDate] = useState<string>("");
+    const [createdDate, setCreatedDate] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(true);
     const [saving, setSaving] = useState<boolean>(false);
     const [saved, setSaved] = useState<boolean>(false);
@@ -140,6 +142,14 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                     setStatus(data.status);
                     await debug_log({ message: `Set status: ${data.status}` });
                 }
+                if (data.created_at_formatted) {
+                    setCreatedDate(data.created_at_formatted);
+                    await debug_log({ message: `Set created date: ${data.created_at_formatted}` });
+                }
+                if (data.finished_at_formatted) {
+                    setFinishedDate(data.finished_at_formatted);
+                    await debug_log({ message: `Set finished date: ${data.finished_at_formatted}` });
+                }
             } catch (error) {
                 await debug_log({ message: `Error loading review: ${error}` });
             } finally {
@@ -154,11 +164,17 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
     const handleSave = async () => {
         setSaving(true);
         try {
-            const reviewData = {
+            const reviewData: any = {
                 review: reviewText,
                 rating: rating,
                 status: status
             };
+
+            // Добавляем дату прохождения только если статус FINISHED
+            if (status === 'FINISHED' && finishedDate) {
+                reviewData.finished_at_formatted = finishedDate;
+                await debug_log({ message: `Adding finished date: ${finishedDate}` });
+            }
 
             await debug_log({ message: `Saving review data: ${JSON.stringify(reviewData)}` });
 
@@ -195,6 +211,8 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                 setReviewText("");
                 setRating(0);
                 setStatus('IN_PROGRESS');
+                setFinishedDate("");
+                setCreatedDate("");
                 setOriginalData({});
             }
         } catch (error) {
@@ -215,7 +233,8 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
         return (
             reviewText !== (originalData.review || '') ||
             rating !== (originalData.rating || 0) ||
-            status !== (originalData.status || 'IN_PROGRESS')
+            status !== (originalData.status || 'IN_PROGRESS') ||
+            finishedDate !== (originalData.finished_at_formatted || '')
         );
     };
 
@@ -225,7 +244,7 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
             setSaved(false);
             setDeleted(false);
         }
-    }, [reviewText, rating, status]);
+    }, [reviewText, rating, status, finishedDate]);
 
     if (loading) {
         return (
@@ -237,7 +256,7 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
 
     return (
         <ModalRoot closeModal={onClose}>
-            <div style={{ padding: '20px', minWidth: '500px' }}>
+            <div style={{ padding: '10px', minWidth: '500px' }}>
                 <h2 style={{ marginBottom: '20px' }}>Game Review</h2>
                 
                 {/* Поле для текста обзора */}
@@ -250,7 +269,7 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                         onChange={(e) => setReviewText(e.target.value)}
                         placeholder="Write your game review..."
                         style={{
-                            width: '100%',
+                            width: '95%',
                             height: '120px',
                             padding: '8px',
                             border: '1px solid #ccc',
@@ -295,7 +314,7 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                 </div>
 
                 {/* Поле для статуса игры */}
-                <div style={{ marginBottom: '20px' }}>
+                <div style={{ marginBottom: '15px' }}>
                     <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
                         Game Status:
                     </label>
@@ -303,7 +322,7 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                         value={status}
                         onChange={(e) => setStatus(e.target.value)}
                         style={{
-                            width: '100%',
+                            width: '97%',
                             padding: '8px',
                             border: '1px solid #ccc',
                             borderRadius: '4px',
@@ -318,6 +337,28 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                     </select>
                 </div>
 
+
+                {/* Поле для даты прохождения - только если статус FINISHED */}
+                {status === 'FINISHED' && (
+                    <div style={{ marginBottom: '15px' }}>
+                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                            Finished Date:
+                        </label>
+                        <input
+                            type="date"
+                            value={finishedDate}
+                            onChange={(e) => setFinishedDate(e.target.value)}
+                            style={{
+                                width: '95%',
+                                padding: '8px',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                fontSize: '14px'
+                            }}
+                        />
+                    </div>
+                )}
+
                 {/* Кнопки управления */}
                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', alignItems: 'center' }}>
                     <DialogButton 
@@ -327,18 +368,22 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                             backgroundColor: saved ? '#28a745' : '#007bff', 
                             color: 'white',
                             border: 'none',
-                            padding: '8px 16px',
+                            padding: '8px 12px',
                             borderRadius: '4px',
                             cursor: (saving || !hasChanges()) ? 'not-allowed' : 'pointer',
                             opacity: (saving || !hasChanges()) ? 0.6 : 1,
                             display: 'flex',
                             alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '85%',
+                            height: '30px',
+                            fontSize: '14px',
                             gap: '5px'
                         }}
                     >
-                        {saving ? 'Saving...' : saved ? '✓ Saved' : 'Save'}
+                        {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save'}
                     </DialogButton>
-                    <button 
+                    <button  
                         onClick={handleDelete}
                         style={{ 
                             backgroundColor: deleted ? '#28a745' : '#dc3545', 
@@ -346,10 +391,14 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                             border: 'none',
                             padding: '8px 12px',
                             borderRadius: '4px',
-                            cursor: 'pointer',
                             fontSize: '14px',
+                            width: '15%',
+                            height: '45px',
+                            cursor: 'pointer',
+                            
                             display: 'flex',
                             alignItems: 'center',
+                            justifyContent: 'center',
                             gap: '5px'
                         }}
                         title={deleted ? "Review deleted" : "Delete review"}
@@ -455,7 +504,7 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                                         strTitle: "Game Review", 
                                         bHideMainWindowForPopouts: false, 
                                         bForcePopOut: true, 
-                                        popupHeight: 600, 
+                                        popupHeight: 620, 
                                         popupWidth: 600 
                                     }
                                 );
