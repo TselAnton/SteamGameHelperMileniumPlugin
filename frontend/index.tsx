@@ -1,6 +1,7 @@
 import { callable, findModule, sleep, Millennium, Menu, MenuItem, showContextMenu, DialogButton, TextField, ModalRoot, showModal } from "@steambrew/client";
 import { render } from "react-dom";
-import React, { useState, useEffect } from "react";
+import * as React from "react";
+import { useState, useEffect } from "react";
 import type * as globals from "./sharedjscontextglobals";
 
 declare const g_PopupManager: globals.PopupManager;
@@ -690,7 +691,7 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
     // Обработчик навигации по страницам
     MainWindowBrowserManager.m_browser.on("finished-request", async (currentURL, previousURL) => {
         const currentPath = MainWindowBrowserManager.m_lastLocation.pathname;
-        await debug_log({ message: `Browser navigation detected. Path: ${currentPath}, URL: ${currentURL}, Previous: ${previousURL}` });
+        await debug_log({ message: `Browser navigation detected. Path: ${currentPath}, Previous: ${previousURL}` });
         
         // Добавляем кнопку обзора только на страницах игр
         if (currentPath.startsWith("/library/app/")) {
@@ -773,115 +774,106 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                 await debug_log({ message: "No appId found in path" });
             }
         } else if (currentPath.startsWith("/library/collection/")) {
-            await debug_log({ message: "Collection page detected, processing..." });
+            const collectionId = uiStore.currentGameListSelection.strCollectionId;
+            await debug_log({ message: `Found collectionId: ${collectionId}` });
             
-            const collectionIdMatch = currentPath.match(/\/library\/collection\/(.+)/);
-            await debug_log({ message: `CollectionId match result: ${JSON.stringify(collectionIdMatch)}` });
-            
-            if (collectionIdMatch) {
-                const collectionId = collectionIdMatch[1];
-                await debug_log({ message: `Extracted collectionId: ${collectionId}` });
+            try {
+                // Ищем кнопку настроек коллекции (аналогично кнопке настроек игры)
+                await debug_log({ message: "Looking for collection options button..." });
                 
-                try {
-                    // Ищем кнопку настроек коллекции (аналогично кнопке настроек игры)
-                    await debug_log({ message: "Looking for collection options button..." });
-                    
-                    const collectionOptionsButton = await WaitForElement(`div.${findModule(e => e.CollectionOptions).CollectionOptions}`, popup.m_popup.document);
-                    
-                    await debug_log({ message: `Collection options button found: ${!!collectionOptionsButton}` });
-                    
-                    if (collectionOptionsButton) {
-                        // Проверяем, не существует ли уже кнопка колеса фортуны
-                        const existingWheelButton = collectionOptionsButton.querySelector('button.steam-game-helper-wheel-button');
-                        await debug_log({ message: `Existing wheel button check: ${!!existingWheelButton}` });
-                        
-                        if (!existingWheelButton) {
-                            await debug_log({ message: "Creating fortune wheel button..." });
-                            
-                            // Создаем кнопку колеса фортуны
-                            const wheelButton = popup.m_popup.document.createElement("div");
-                            render(
-                                <DialogButton 
-                                    className="steam-game-helper-wheel-button" 
-                                    style={{
-                                        width: "40px", 
-                                        marginLeft: "3px", 
-                                        marginRight: "3px",
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        fontSize: '12px',
-                                        fontWeight: 'bold'
-                                    }}
-                                >
-                                    🎯
-                                </DialogButton>, 
-                                wheelButton
-                            );
-                            
-                            collectionOptionsButton.insertBefore(wheelButton, collectionOptionsButton.firstChild.nextSibling);
-                            
-                            await debug_log({ message: "Fortune wheel button inserted successfully" });
-
-                            // Добавляем обработчик клика
-                            wheelButton.addEventListener("click", async () => {
-                                await debug_log({ message: `Fortune wheel button clicked for collection: ${collectionId}` });
-                                
-                                try {
-                                    // Получаем список игр из коллекции
-                                    const collection = collectionStore.GetCollection(collectionId);
-                                    await debug_log({ message: `Collection found: ${!!collection}` });
-                                    
-                                    if (collection && collection.allApps) {
-                                        const games: GameInfo[] = collection.allApps.map((app: any) => ({
-                                            appid: app.appid,
-                                            display_name: app.display_name,
-                                            header_image: app.header_image
-                                        }));
-                                        
-                                        await debug_log({ message: `Found ${games.length} games in collection` });
-                                        
-                                        if (games.length > 0) {
-                                            showModal(
-                                                <FortuneWheelModal 
-                                                    games={games} 
-                                                    onClose={() => {
-                                                        // Модальное окно закроется автоматически
-                                                    }} 
-                                                />,
-                                                popup.m_popup.window, 
-                                                { 
-                                                    strTitle: "Fortune Wheel", 
-                                                    bHideMainWindowForPopouts: false, 
-                                                    bForcePopOut: true, 
-                                                    popupHeight: 734, 
-                                                    popupWidth: 990 
-                                                }
-                                            );
-                                        } else {
-                                            await debug_log({ message: "Collection is empty, cannot show fortune wheel" });
-                                        }
-                                    } else {
-                                        await debug_log({ message: "Collection not found or has no games" });
-                                    }
-                                } catch (error) {
-                                    await debug_log({ message: `Error getting collection games: ${error}` });
-                                }
-                            });
-                            
-                            await debug_log({ message: "Fortune wheel button click handler added" });
-                        } else {
-                            await debug_log({ message: "Fortune wheel button already exists, skipping creation" });
-                        }
-                    } else {
-                        await debug_log({ message: "Collection options button not found" });
+                const collectionOptionsButton = await WaitForElement(`div.${findModule(e => e.CollectionOptions).CollectionOptions}`, popup.m_popup.document);
+                
+                await debug_log({ message: `Collection options button found: ${!!collectionOptionsButton}` });
+                
+                if (collectionOptionsButton) {
+                    // Удаляем существующую кнопку колеса фортуны если она есть
+                    const existingWheelButton = collectionOptionsButton.querySelector('button.steam-game-helper-wheel-button');
+                    if (existingWheelButton) {
+                        await debug_log({ message: "Removing existing fortune wheel button" });
+                        existingWheelButton.parentNode?.removeChild(existingWheelButton);
                     }
-                } catch (error) {
-                    await debug_log({ message: `Error processing collection page: ${error}` });
+                    
+                    await debug_log({ message: `Creating fortune wheel button for collection: ${collectionId}` });
+                    
+                    // Создаем кнопку колеса фортуны
+                    const wheelButton = popup.m_popup.document.createElement("div");
+                    render(
+                        <DialogButton 
+                            className="steam-game-helper-wheel-button" 
+                            style={{
+                                width: "40px", 
+                                marginLeft: "3px", 
+                                marginRight: "3px",
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            🎯
+                        </DialogButton>, 
+                        wheelButton
+                    );
+                    
+                    collectionOptionsButton.insertBefore(wheelButton, collectionOptionsButton.firstChild.nextSibling);
+                    
+                    await debug_log({ message: "Fortune wheel button inserted successfully" });
+
+                    // Добавляем обработчик клика с замыканием на текущий collectionId
+                    wheelButton.addEventListener("click", async () => {
+                        await debug_log({ message: `Fortune wheel button clicked for collection: ${collectionId}` });
+                        
+                        try {
+                            // Получаем список игр из коллекции
+                            const collection = collectionStore.GetCollection(collectionId.replace('%20', ' '));
+                            await debug_log({ message: `Collection found: ${!!collection}` });
+                            
+                            if (collection && collection.allApps) {
+                                const games: GameInfo[] = collection.allApps.map((app: any) => ({
+                                    appid: app.appid,
+                                    display_name: app.display_name,
+                                    header_image: app.header_filename
+                                }));
+                                
+                                await debug_log({ message: `Found ${games.length} games in collection ${collectionId}` });
+                                
+                                if (games.length > 0) {
+                                    showModal(
+                                        <FortuneWheelModal 
+                                            key={`fortune-wheel-${collectionId}-${Date.now()}`}
+                                            games={games} 
+                                            onClose={() => {
+                                                // Модальное окно закроется автоматически
+                                            }} 
+                                        />,
+                                        popup.m_popup.window, 
+                                        { 
+                                            strTitle: `Fortune Wheel - ${collectionId}`, 
+                                            bHideMainWindowForPopouts: false, 
+                                            bForcePopOut: true, 
+                                            popupHeight: 734, 
+                                            popupWidth: 990 
+                                        }
+                                    );
+                                } else {
+                                    await debug_log({ message: "Collection is empty, cannot show fortune wheel" });
+                                }
+                            } else {
+                                await debug_log({ message: "Collection not found or has no games" });
+                            }
+                        } catch (error) {
+                            await debug_log({ message: `Error getting collection games: ${error}` });
+                        }
+                    });
+                    
+                    await debug_log({ message: "Fortune wheel button click handler added" });
+                } else {
+                    await debug_log({ message: "Collection options button not found" });
                 }
-            } else {
-                await debug_log({ message: "No collectionId found in path" });
+            } catch (error) {
+                await debug_log({ message: `Error processing collection page: ${error}` });
             }
         } else {
             await debug_log({ message: "Not a game or collection page, skipping" });
