@@ -3,6 +3,7 @@ logger = PluginUtils.Logger()
 
 import json
 import os
+import base64
 from datetime import datetime, timezone, timedelta
 from __main__ import PLUGIN_BASE_DIR
 
@@ -225,6 +226,65 @@ class Backend:
         """Получить все обзоры"""
         logger.log("get_all_reviews() called")
         return json.dumps(reviews_db, ensure_ascii=False)
+
+
+    @staticmethod
+    def get_game_image_base64(app_id, file_name):
+        """Получить картинку игры в формате base64"""
+        try:
+            # Получаем путь к папке Steam из PLUGIN_BASE_DIR
+            plugin_dir = PLUGIN_BASE_DIR
+            
+            # Находим папку Steam (путь до папки plugins)
+            if "plugins" in plugin_dir:
+                steam_dir = plugin_dir.split("plugins")[0].rstrip("/\\")
+            else:
+                # Fallback: предполагаем, что Steam в стандартном месте
+                steam_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Steam")
+                logger.log(f"Using fallback Steam directory: {steam_dir}")
+            
+            # Строим путь к картинке в кэше
+            image_path = os.path.join(
+                steam_dir,
+                "appcache",
+                "librarycache",
+                str(app_id),
+                file_name
+            )
+            
+            logger.log(f"Prepared image path: {image_path}")
+            
+            # Проверяем, существует ли файл
+            if os.path.exists(image_path):
+                logger.log(f"Image file exists: {image_path}")
+                
+                # Читаем файл и конвертируем в base64
+                with open(image_path, "rb") as image_file:
+                    image_data = image_file.read()
+                    base64_data = base64.b64encode(image_data).decode('utf-8')
+                    
+                    # Определяем MIME тип по расширению файла
+                    file_ext = os.path.splitext(file_name)[1].lower()
+                    if file_ext in ['.jpg', '.jpeg']:
+                        mime_type = 'image/jpeg'
+                    elif file_ext == '.png':
+                        mime_type = 'image/png'
+                    elif file_ext == '.webp':
+                        mime_type = 'image/webp'
+                    else:
+                        mime_type = 'image/jpeg'  # fallback
+                    
+                    # Формируем data URL
+                    data_url = f"data:{mime_type};base64,{base64_data}"
+                    logger.log(f"Created data URL for image: {file_name}")
+                    return data_url
+            else:
+                logger.log(f"Image file does not exist: {image_path}")
+                return None
+                
+        except Exception as e:
+            logger.log(f"Error getting game image base64: {e}")
+            return None
 
 class Plugin:
     def _front_end_loaded(self):

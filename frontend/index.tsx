@@ -9,12 +9,14 @@ declare const MainWindowBrowserManager: globals.MainWindowBrowserManager;
 declare const App: globals.App;
 declare const collectionStore: any;
 declare const SteamUIStore: any;
+declare const uiStore: any;
 
 // Backend функции для работы с обзорами
 const get_review = callable<[{ app_id: number }], string>('Backend.get_review');
 const save_review = callable<[{ app_id: number, review_data: string }], boolean>('Backend.save_review');
 const delete_review = callable<[{ app_id: number }], boolean>('Backend.delete_review');
 const debug_log = callable<[{ message: string }], boolean>('Backend.debug_log');
+const get_game_image_base64 = callable<[{ app_id: string, file_name: string }], string | null>('Backend.get_game_image_base64');
 
 const WaitForElement = async (sel: string, parent = document) =>
 	[...(await Millennium.findElement(parent, sel))][0];
@@ -104,7 +106,7 @@ const WHEEL_SPIN_DURATION = 10000; // 10 секунд в миллисекунд�
 interface GameInfo {
     appid: number;
     display_name: string;
-    header_image?: string;
+    header_filename?: string;
 }
 
 // Компонент колеса фортуны
@@ -113,6 +115,19 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
     const [selectedGame, setSelectedGame] = useState<GameInfo | null>(null);
     const [wheelRotation, setWheelRotation] = useState<number>(0);
     const [showResult, setShowResult] = useState<boolean>(false);
+    const [selectedGameImageUrl, setSelectedGameImageUrl] = useState<string | null>(null);
+
+    // Функция для загрузки картинки игры в base64
+    const loadGameImage = async (appId: number, fileName: string): Promise<string | null> => {
+        try {
+            const imageBase64 = await get_game_image_base64({ app_id: appId.toString(), file_name: fileName });
+            await debug_log({ message: `Image base64 for app ${appId}, file ${fileName}: ${imageBase64 ? 'received' : 'null'}` });
+            return imageBase64;
+        } catch (error) {
+            await debug_log({ message: `Error getting image base64 for app ${appId}: ${error}` });
+            return null;
+        }
+    };
 
     const spinWheel = () => {
         if (isSpinning || games.length === 0) return;
@@ -120,6 +135,7 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
         setIsSpinning(true);
         setShowResult(false);
         setSelectedGame(null);
+        setSelectedGameImageUrl(null);
         
         // Генерируем случайное количество оборотов (от 15 до 20 полных оборотов для еще большего ускорения)
         const randomRotations = Math.random() * 8 + 15;
@@ -141,10 +157,21 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
         const chosenGame = games[sectorIndex];
  
         // Показываем результат после завершения анимации
-        setTimeout(() => {
+        setTimeout(async () => {
             setSelectedGame(chosenGame);
             setShowResult(true);
             setIsSpinning(false);
+            
+            // Загружаем картинку выбранной игры
+            if (chosenGame.header_filename) {
+                await debug_log({ message: `Loading image for game: ${chosenGame.display_name}, appId: ${chosenGame.appid}, filename: ${chosenGame.header_filename}` });
+                const imageUrl = await loadGameImage(chosenGame.appid, chosenGame.header_filename);
+                await debug_log({ message: `>> Final image url: ${imageUrl}` });
+                setSelectedGameImageUrl(imageUrl);
+            } else {
+                await debug_log({ message: `No header_filename for game: ${chosenGame.display_name}` });
+                setSelectedGameImageUrl(null);
+            }
         }, WHEEL_SPIN_DURATION);
     };
 
@@ -272,18 +299,33 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                         {showResult && selectedGame ? (
                             <div style={{ textAlign: 'center' }}>
                                 <h3 style={{ marginBottom: '15px', color: '#28a745' }}>Selected Game!</h3>
-                                {selectedGame.header_image && (
+                                {selectedGameImageUrl ? (
                                     <img 
-                                        src={selectedGame.header_image} 
+                                        src={selectedGameImageUrl} 
                                         alt={selectedGame.display_name}
                                         style={{
                                             width: '200px',
-                                            height: '100px',
+                                            height: '300px',
                                             objectFit: 'cover',
                                             borderRadius: '8px',
                                             marginBottom: '10px'
                                         }}
                                     />
+                                ) : (
+                                    <div style={{
+                                        width: '200px',
+                                        height: '300px',
+                                        backgroundColor: '#333',
+                                        borderRadius: '8px',
+                                        marginBottom: '10px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#666',
+                                        fontSize: '12px'
+                                    }}>
+                                        No Image
+                                    </div>
                                 )}
                                 <h4 style={{ marginBottom: '20px' }}>{selectedGame.display_name}</h4>
                             </div>
@@ -834,7 +876,7 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                                 const games: GameInfo[] = collection.allApps.map((app: any) => ({
                                     appid: app.appid,
                                     display_name: app.display_name,
-                                    header_image: app.header_filename
+                                    header_filename: app.library_capsule_filename
                                 }));
                                 
                                 await debug_log({ message: `Found ${games.length} games in collection ${collectionId}` });
