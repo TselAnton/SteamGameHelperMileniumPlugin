@@ -107,6 +107,7 @@ interface GameInfo {
     appid: number;
     display_name: string;
     header_filename?: string;
+    installed?: boolean;
 }
 
 // Компонент колеса фортуны
@@ -116,6 +117,18 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
     const [wheelRotation, setWheelRotation] = useState<number>(0);
     const [showResult, setShowResult] = useState<boolean>(false);
     const [selectedGameImageUrl, setSelectedGameImageUrl] = useState<string | null>(null);
+    const [showInstalledOnly, setShowInstalledOnly] = useState<boolean>(true);
+
+    // Эффект для обработки случая, когда нет установленных игр
+    useEffect(() => {
+        if (showInstalledOnly && games.length > 0) {
+            const installedGames = games.filter(game => game.installed);
+            if (installedGames.length === 0) {
+                setShowInstalledOnly(false);
+                alert("No installed games found in this collection. Showing all games instead.");
+            }
+        }
+    }, [showInstalledOnly, games]);
 
     // Функция для загрузки картинки игры в base64
     const loadGameImage = async (appId: number, fileName: string): Promise<string | null> => {
@@ -130,31 +143,37 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
     };
 
     const spinWheel = () => {
-        if (isSpinning || games.length === 0) return;
-        
+        if (isSpinning || filteredGames.length === 0) {
+            if (filteredGames.length === 0 && showInstalledOnly) {
+                // Показываем уведомление пользователю
+                alert("No installed games found in this collection. Please uncheck 'Show only installed games' to see all games.");
+            }
+            return;
+        }
+
         setIsSpinning(true);
         setShowResult(false);
         setSelectedGame(null);
         setSelectedGameImageUrl(null);
-        
+
         // Генерируем случайное количество оборотов (от 15 до 20 полных оборотов для еще большего ускорения)
         const randomRotations = Math.random() * 8 + 15;
         const finalRotation = wheelRotation + (randomRotations * 360);
-        
+
         setWheelRotation(finalRotation);
-        
+
         // Вычисляем, какой сектор окажется у стрелки (90 градусов, верхняя точка)
         // Нормализуем финальный угол поворота к диапазону 0-360
         const normalizedRotation = finalRotation % 360;
-        
+
         // Поскольку колесо поворачивается по часовой стрелке, а стрелка неподвижна в позиции 90 градусов,
         // нужно вычислить, какой сектор окажется в этой позиции
         // Секторы начинаются с 0 градусов, поэтому нужно учесть смещение
         const arrowAngle = (270 - normalizedRotation + 360) % 360;
-        
+
         // Определяем индекс сектора, который окажется у стрелки
-        const sectorIndex = Math.floor(arrowAngle / anglePerGame) % games.length;
-        const chosenGame = games[sectorIndex];
+        const sectorIndex = Math.floor(arrowAngle / anglePerGame) % filteredGames.length;
+        const chosenGame = filteredGames[sectorIndex];
  
         // Показываем результат после завершения анимации
         setTimeout(async () => {
@@ -182,8 +201,11 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
         }
     };
 
+    // Фильтруем игры по статусу установки
+    const filteredGames = showInstalledOnly ? games.filter(game => game.installed) : games;
+
     // Вычисляем угол для каждой игры
-    const anglePerGame = 360 / games.length;
+    const anglePerGame = 360 / filteredGames.length;
     
     return (
         <ModalRoot closeModal={onClose}>
@@ -220,26 +242,26 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                             overflow: 'hidden',
                             transform: `rotate(${wheelRotation}deg)`,
                             transition: isSpinning ? `transform ${WHEEL_SPIN_DURATION}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)` : 'none',
-                            background: 'conic-gradient(' + 
-                                games.map((_, index) => {
-                                    const hue = (index * 360) / games.length;
+                            background: 'conic-gradient(' +
+                                filteredGames.map((_, index) => {
+                                    const hue = (index * 360) / filteredGames.length;
                                     return `hsl(${hue}, 63%, 52%) ${index * anglePerGame}deg ${(index + 1) * anglePerGame}deg`;
                                 }).join(', ') + ')'
                         }}>
                             {/* Секторы с названиями игр */}
-                            {games.map((game, index) => {
+                            {filteredGames.map((game, index) => {
                                 const angle = index * anglePerGame;
                                 const middleAngle = angle + anglePerGame / 2; // Центр сектора
                                 const middleAngleRad = (middleAngle * Math.PI) / 180; // Конвертируем в радианы
-                                
+
                                 // Вычисляем позицию текста на основе угла (радиус 130px от центра)
                                 const radius = 130;
                                 const textX = 200 + Math.cos(middleAngleRad) * radius; // 200 - центр колеса
                                 const textY = 200 + Math.sin(middleAngleRad) * radius; // 200 - центр колеса
-                                
+
                                 // Определяем, нужно ли переворачивать текст для читаемости
                                 const isUpsideDown = middleAngle > 90 && middleAngle < 270;
-                                
+
                                 return (
                                     <div
                                         key={game.appid}
@@ -338,29 +360,58 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                     </div>
                 </div>
                 
+                {/* Переключатель режима отображения */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginTop: '15px',
+                    justifyContent: 'center'
+                }}>
+                    <label style={{
+                        fontSize: '14px',
+                        fontWeight: 'bold'
+                    }}>
+                       Installed games only:
+                    </label>
+                    <input
+                        type="checkbox"
+                        defaultChecked={true}
+                        checked={showInstalledOnly}
+                        onChange={(e) => setShowInstalledOnly(e.target.checked)}
+                        style={{
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'pointer'
+                        }}
+                    />
+                    {/* Отображение количества игр */}
+                    {` (Total: ${showInstalledOnly ? filteredGames.length : games.length})`}
+                </div>
+
                 {/* Кнопки управления */}
-                <div style={{ 
-                    display: 'flex', 
-                    gap: '15px', 
+                <div style={{
+                    display: 'flex',
+                    gap: '15px',
                     marginTop: '20px',
                     justifyContent: 'center'
                 }}>
-                    <DialogButton 
+                        <DialogButton
                         onClick={spinWheel}
-                        disabled={isSpinning || games.length === 0}
-                        style={{ 
-                            backgroundColor: isSpinning ? '#6c757d' : '#007bff', 
+                        disabled={isSpinning || filteredGames.length === 0}
+                        style={{
+                            backgroundColor: isSpinning ? '#6c757d' : (filteredGames.length === 0 ? '#dc3545' : '#007bff'),
                             color: 'white',
                             border: 'none',
                             padding: '10px 20px',
                             borderRadius: '4px',
-                            cursor: isSpinning ? 'not-allowed' : 'pointer',
-                            opacity: isSpinning ? 0.6 : 1,
+                            cursor: isSpinning ? 'not-allowed' : (filteredGames.length === 0 ? 'not-allowed' : 'pointer'),
+                            opacity: isSpinning ? 0.6 : (filteredGames.length === 0 ? 0.6 : 1),
                             fontSize: '16px',
                             fontWeight: 'bold'
                         }}
                     >
-                        {isSpinning ? 'Spinning...' : 'Spin'}
+                        {isSpinning ? 'Spinning...' : (filteredGames.length === 0 ? 'No Games Available' : 'Spin')}
                     </DialogButton>
                     
                     {showResult && selectedGame && (
@@ -419,8 +470,6 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                     const step3 = forceUtf8Encoding(step2);
                     
                     await debug_log({ message: `Original review text: ${data.review}` });
-                    await debug_log({ message: `After decodeUtf8String: ${step1}` });
-                    await debug_log({ message: `After fixCorruptedEncoding: ${step2}` });
                     await debug_log({ message: `After forceUtf8Encoding: ${step3}` });
                     
                     setReviewText(step3);
@@ -872,17 +921,37 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                             // Получаем список игр из коллекции
                             const collection = collectionStore.GetCollection(collectionId.replace('%20', ' '));
                             await debug_log({ message: `Collection found: ${!!collection}` });
+                            await debug_log({ message: `Games found: ${JSON.stringify(collection.allApps)}` });
                             
                             if (collection && collection.allApps) {
-                                const games: GameInfo[] = collection.allApps.map((app: any) => ({
+                                // Проверяем, есть ли параметр installed у игр
+                                const sampleApp = collection.allApps[0];
+                                if (sampleApp) {
+                                    await debug_log({ message: `Sample app properties: ${Object.keys(sampleApp).join(', ')}` });
+                                    if (sampleApp.installed !== undefined) {
+                                        await debug_log({ message: `Sample app installed status: ${sampleApp.installed}` });
+                                    }
+                                    if (sampleApp.per_client_data) {
+                                        await debug_log({ message: `Sample app per_client_data: ${JSON.stringify(sampleApp.per_client_data)}` });
+                                    }
+                                }
+
+                                const games: GameInfo[] = collection.allApps
+                                .map((app: any) => ({
                                     appid: app.appid,
                                     display_name: app.display_name,
-                                    header_filename: app.library_capsule_filename
+                                    header_filename: app.library_capsule_filename,
+                                    installed: app.installed || (app.per_client_data && app.per_client_data.installed)
                                 }));
-                                
+
                                 await debug_log({ message: `Found ${games.length} games in collection ${collectionId}` });
-                                
+
                                 if (games.length > 0) {
+                                    // Проверяем, есть ли хотя бы одна установленная игра при фильтре "только установленные"
+                                    const installedGames = games.filter(g => g.installed);
+                                    if (installedGames.length === 0) {
+                                        await debug_log({ message: "No installed games found in collection, showing all games by default" });
+                                    }
                                     showModal(
                                         <FortuneWheelModal 
                                             key={`fortune-wheel-${collectionId}-${Date.now()}`}
