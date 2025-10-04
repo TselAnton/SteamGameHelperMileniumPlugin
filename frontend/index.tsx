@@ -298,7 +298,7 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                     }}>
                         {showResult && selectedGame ? (
                             <div style={{ textAlign: 'center' }}>
-                                <h3 style={{ marginBottom: '15px', color: '#28a745' }}>Selected Game!</h3>
+                                <h3 style={{ marginBottom: '5px', color: '#28a745' }}>Selected Game!</h3>
                                 {selectedGameImageUrl ? (
                                     <img 
                                         src={selectedGameImageUrl} 
@@ -310,7 +310,7 @@ const FortuneWheelModal: React.FC<{ games: GameInfo[], onClose: () => void }> = 
                                             borderRadius: '8px',
                                             marginBottom: '10px'
                                         }}
-                                    />
+                                   />
                                 ) : (
                                     <div style={{
                                         width: '200px',
@@ -516,7 +516,8 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
     const getRatingColor = (rating: number) => {
         if (rating <= 2.0) return '#dc3545'; // красный
         if (rating <= 3.5) return '#ffc107'; // желтый
-        return '#28a745'; // зеленый
+        if (rating <= 4.5) return '#10A532'; // желтый
+        return '#5281E6'; // зеленый
     };
 
     // Проверяем, были ли внесены изменения
@@ -582,13 +583,13 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                             type="range"
                             min="1"
                             max="5"
-                            step="0.5"
+                            step="0.1"
                             value={rating || 1}
                             onChange={(e) => setRating(parseFloat(e.target.value))}
                             style={{
                                 flex: 1,
                                 height: '20px',
-                                background: `linear-gradient(to right, ${getRatingColor(rating || 1)} 0%, ${getRatingColor(rating || 1)} ${((rating || 1) - 1) / 4 * 100}%, #ddd ${((rating || 1) - 1) / 4 * 100}%, #ddd 100%)`,
+                                background: `background: linear-gradient(15deg, red, green)`,
                                 outline: 'none',
                                 borderRadius: '10px',
                                 cursor: 'pointer'
