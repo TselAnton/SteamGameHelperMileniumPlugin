@@ -227,6 +227,82 @@ class Backend:
         logger.log("get_all_reviews() called")
         return json.dumps(reviews_db, ensure_ascii=False)
 
+    @staticmethod
+    def get_game_ratings(show_all_games=False, selected_year=None):
+        """Получить рейтинги всех игр с обзорами, отсортированные по оценке и сгруппированные по статусам"""
+        logger.log(f"get_game_ratings() called with show_all_games={show_all_games}, selected_year={selected_year}")
+
+        # Сначала собираем все рейтинги без фильтрации
+        all_ratings = []
+        years = set()
+
+        for app_id, review_data in reviews_db.items():
+            # Получаем год из даты создания или завершения
+            created_at = review_data.get('created_at', 0)
+            finished_at = review_data.get('finished_at', 0)
+
+            # Используем дату завершения, если она есть, иначе дату создания
+            timestamp = finished_at if finished_at > 0 else created_at
+            if timestamp > 0:
+                year = datetime.fromtimestamp(timestamp, tz=timezone.utc).year
+                years.add(year)
+
+            all_ratings.append({
+                'app_id': app_id,
+                'display_name': review_data.get('display_name', f'Game {app_id}'),
+                'icon_hash': review_data.get('icon_hash', None),
+                'rating': review_data['rating'] if 'rating' in review_data else 1,
+                'status': review_data.get('status', 'UNKNOWN'),
+                'review': review_data.get('review', ''),
+                'created_at': created_at,
+                'finished_at': finished_at,
+                'year': year if timestamp > 0 else None
+            })
+
+        # Теперь применяем фильтры для отображения
+        ratings = all_ratings.copy()
+
+        # Фильтруем по статусу игры
+        if not show_all_games:
+            ratings = [r for r in ratings if r['status'] in ['FINISHED', 'SKIPPED']]
+
+        # Фильтруем по выбранному году, если указан
+        if selected_year and selected_year != 'all':
+            try:
+                target_year = int(selected_year)
+                ratings = [r for r in ratings if r['year'] == target_year]
+            except (ValueError, TypeError):
+                logger.log(f"Invalid selected_year value: {selected_year}")
+
+        # Группируем по статусам в нужном порядке
+        status_order = ['FINISHED', 'SKIPPED', 'IN_PROGRESS']
+        grouped_by_status = {}
+
+        for rating in ratings:
+            status = rating['status']
+            if status not in grouped_by_status:
+                grouped_by_status[status] = []
+            grouped_by_status[status].append(rating)
+
+        # Сортируем игры внутри каждой группы по рейтингу (от высшего к низшему)
+        for status in grouped_by_status:
+            grouped_by_status[status].sort(key=lambda x: x['rating'], reverse=True)
+
+        # Сортируем года от меньшего к большему
+        sorted_years = sorted(years)
+
+        result = {
+            'all_ratings': all_ratings,  # Все рейтинги для статистики
+            'ratings': ratings,  # Отфильтрованные рейтинги для отображения
+            'grouped_by_status': grouped_by_status,
+            'status_order': status_order,
+            'years': sorted_years,
+            'total_games': len(ratings)
+        }
+
+        logger.log(f"Found {len(all_ratings)} total games with ratings, {len(ratings)} filtered for display, grouped into {len(grouped_by_status)} status groups")
+        return json.dumps(result, ensure_ascii=False)
+
 
     @staticmethod
     def get_game_image_base64(app_id, file_name):

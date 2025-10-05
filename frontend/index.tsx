@@ -17,6 +17,7 @@ const save_review = callable<[{ app_id: number, review_data: string }], boolean>
 const delete_review = callable<[{ app_id: number }], boolean>('Backend.delete_review');
 const debug_log = callable<[{ message: string }], boolean>('Backend.debug_log');
 const get_game_image_base64 = callable<[{ app_id: string, file_name: string }], string | null>('Backend.get_game_image_base64');
+const get_game_ratings = callable<[{ show_all_games?: boolean, selected_year?: string | number }], string>('Backend.get_game_ratings');
 
 const WaitForElement = async (sel: string, parent = document) =>
 	[...(await Millennium.findElement(parent, sel))][0];
@@ -517,6 +518,20 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                 await debug_log({ message: `Adding finished date: ${finishedDate}` });
             }
 
+            const collectionGames = collectionStore.GetCollection(uiStore.currentGameListSelection.strCollectionId);
+            if (collectionGames && collectionGames.allApps) {
+                const gameData = collectionGames.allApps
+                    .map((app: any) => ({
+                        appid: app.appid,
+                        display_name: app.display_name,
+                        icon_hash: app.icon_hash
+                    }))
+                    .find((app: any) => app.appid === appId);
+
+                reviewData.display_name = gameData.display_name;
+                reviewData.icon_hash = gameData.icon_hash;
+            }
+
             await debug_log({ message: `Saving review data: ${JSON.stringify(reviewData)}` });
 
             const success = await save_review({ 
@@ -753,148 +768,656 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
     );
 };
 
+// Интерфейс для группированных данных
+interface GroupedRatingsData {
+    all_ratings: GameRating[];
+    ratings: GameRating[];
+    grouped_by_status: { [status: string]: GameRating[] };
+    status_order: string[];
+    years: number[];
+    total_games: number;
+}
+
+// Компонент модального окна для отображения рейтингов
+const GameRatingsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+    const [data, setData] = useState<GroupedRatingsData | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [showAllGames, setShowAllGames] = useState<boolean>(true);
+    const [selectedYear, setSelectedYear] = useState<string | number>('all');
+    const [years, setYears] = useState<number[]>([]);
+
+    // Загружаем рейтинги при открытии модального окна или изменении фильтров
+    useEffect(() => {
+        const loadRatings = async () => {
+            try {
+                setLoading(true);
+
+                // Подготавливаем параметры для backend
+                const params: any = { show_all_games: showAllGames };
+                if (selectedYear !== 'all') {
+                    params.selected_year = selectedYear;
+                }
+
+                await debug_log({ message: `Loading ratings with params: ${JSON.stringify(params)}` });
+
+                // Получаем рейтинги игр с фильтрацией
+                const ratingsData = await get_game_ratings(params);
+                const parsedData = JSON.parse(ratingsData) as GroupedRatingsData;
+
+                setData(parsedData);
+                setYears(parsedData.years || []);
+
+                await debug_log({ message: `Loaded ${parsedData.total_games} game ratings for ${parsedData.years?.length || 0} years` });
+            } catch (error) {
+                await debug_log({ message: `Error loading game ratings: ${error}` });
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadRatings();
+    }, [showAllGames, selectedYear]);
+
+    // Получаем цвет для рейтинга
+    const getRatingColor = (rating: number) => {
+        if (rating <= 2.0) return '#dc3545'; // красный
+        if (rating <= 3.5) return '#ffc107'; // желтый
+        if (rating <= 4.5) return '#28a745'; // зеленый
+        return '#007bff'; // синий
+    };
+
+    // Получаем цвет для статуса
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'FINISHED': return '#28a745';
+            case 'IN_PROGRESS': return '#007bff';
+            case 'SKIPPED': return '#6c757d';
+            default: return '#6c757d';
+        }
+    };
+
+    const formatDate = (timestamp: number) => {
+        if (!timestamp) return '';
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleDateString();
+    };
+
+    if (loading) {
+        return (
+            <ModalRoot closeModal={onClose}>
+                <div style={{
+                    padding: '20px',
+                    minWidth: '600px',
+                    minHeight: '400px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    Loading game ratings...
+                </div>
+            </ModalRoot>
+        );
+    }
+
+    if (!data) {
+        return (
+            <ModalRoot closeModal={onClose}>
+                <div style={{
+                    padding: '20px',
+                    minWidth: '600px',
+                    minHeight: '400px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#666'
+                }}>
+                    No data available
+                </div>
+            </ModalRoot>
+        );
+    }
+
+    return (
+        <ModalRoot closeModal={onClose}>
+            <div style={{
+                padding: '20px',
+                minWidth: '900px',
+                minHeight: '700px',
+                maxHeight: '80vh',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column'
+            }}>
+                {/* Заголовок и переключатели */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '20px',
+                    marginTop: '20px',
+                    flexWrap: 'wrap',
+                    gap: '15px'
+                }}>
+                    <h2 style={{ margin: 0 }}>Game Ratings</h2>
+
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        {/* Переключатель фильтра игр */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                Show not finished games:
+                            </label>
+                            <input
+                                type="checkbox"
+                                checked={showAllGames}
+                                onChange={(e) => setShowAllGames(e.target.checked)}
+                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                        </div>
+
+                        {/* Селектор года */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <label style={{ fontSize: '14px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                Year:
+                            </label>
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                                style={{
+                                    padding: '5px 10px',
+                                    border: '1px solid #ccc',
+                                    borderRadius: '4px',
+                                    fontSize: '14px',
+                                    backgroundColor: '#2a2a2a',
+                                    color: '#fff'
+                                }}
+                            >
+                                <option value="all">За всё время</option>
+                                {years.map(year => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Список рейтингов */}
+                <div style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    border: '1px solid #333',
+                    borderRadius: '4px'
+                }}>
+                    {data.total_games === 0 ? (
+                        <div style={{
+                            padding: '20px',
+                            textAlign: 'center',
+                            color: '#666'
+                        }}>
+                            No games with ratings found. Write some reviews first!
+                        </div>
+                    ) : (
+                        data.status_order.map(status => {
+                            const games = data.grouped_by_status[status];
+                            if (!games || games.length === 0) return null;
+
+                            return (
+                                <div key={status}>
+                                    {/* Заголовок группы статуса */}
+                                    <div style={{
+                                        padding: '10px 15px',
+                                        backgroundColor: '#2a2a2a',
+                                        borderBottom: '1px solid #444',
+                                        fontSize: '16px',
+                                        fontWeight: 'bold',
+                                        color: '#fff'
+                                    }}>
+                                        {status === 'FINISHED' ? 'Пройденные' :
+                                         status === 'SKIPPED' ? 'Пропущенные' :
+                                         status === 'IN_PROGRESS' ? 'В процессе' : status} ({games.length} games)
+                                    </div>
+
+                                    {/* Список игр в группе */}
+                                    {games.map((game) => (
+                                        <div
+                                            key={game.app_id}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                padding: '15px',
+                                                borderBottom: '1px solid #333',
+                                                backgroundColor: '#1a1a1a',
+                                                cursor: 'pointer'
+                                            }}
+                                            onClick={() => {
+                                                SteamUIStore.Navigate(`/library/app/${game.app_id}`);
+                                                onClose();
+                                            }}
+                                        >
+                                            {/* Иконка игры */}
+                                            <div style={{
+                                                width: '32px',
+                                                height: '32px',
+                                                marginRight: '15px',
+                                                borderRadius: '4px',
+                                                overflow: 'hidden',
+                                                backgroundColor: '#333',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                            }}>
+                                                {game.icon_hash ? (
+                                                    <img
+                                                        src={`http://media.steampowered.com/steamcommunity/public/images/apps/${game.app_id}/${game.icon_hash}.jpg`}
+                                                        alt={game.display_name}
+                                                        style={{
+                                                            width: '100%',
+                                                            height: '100%',
+                                                            objectFit: 'cover'
+                                                        }}
+                                                        onError={(e) => {
+                                                            // Скрываем изображение при ошибке загрузки
+                                                            (e.target as HTMLElement).style.display = 'none';
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div style={{
+                                                        width: '100%',
+                                                        height: '100%',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        color: '#666',
+                                                        fontSize: '12px'
+                                                    }}>
+                                                        ?
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Рейтинг */}
+                                            <div style={{
+                                                minWidth: '80px',
+                                                textAlign: 'center',
+                                                marginRight: '15px'
+                                            }}>
+                                                <div style={{
+                                                    fontSize: '24px',
+                                                    fontWeight: 'bold',
+                                                    color: getRatingColor(game.rating)
+                                                }}>
+                                                    {game.rating}/5
+                                                </div>
+                                            </div>
+
+                                            {/* Название игры */}
+                                            <div style={{
+                                                flex: 1,
+                                                marginRight: '15px'
+                                            }}>
+                                                <div style={{
+                                                    fontSize: '16px',
+                                                    fontWeight: 'bold',
+                                                    marginBottom: '4px'
+                                                }}>
+                                                    {game.display_name}
+                                                </div>
+                                                {game.review && (
+                                                    <div style={{
+                                                        fontSize: '12px',
+                                                        color: '#aaa',
+                                                        maxHeight: '40px',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap'
+                                                    }}>
+                                                        {game.review}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Статус и дата */}
+                                            <div style={{
+                                                minWidth: '120px',
+                                                textAlign: 'center'
+                                            }}>
+                                                <div style={{
+                                                    padding: '4px 8px',
+                                                    borderRadius: '12px',
+                                                    fontSize: '12px',
+                                                    fontWeight: 'bold',
+                                                    backgroundColor: getStatusColor(game.status),
+                                                    color: 'white',
+                                                    display: 'inline-block',
+                                                    marginBottom: '4px'
+                                                }}>
+                                                    {GAME_STATUS_OPTIONS.find((option) => option.value === game.status)?.label}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: '11px',
+                                                    color: '#888'
+                                                }}>
+                                                    {game.finished_at ? `Finished: ${formatDate(game.finished_at)}` : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                {/* Итоговая статистика */}
+                <div style={{
+                    marginTop: '20px',
+                    padding: '15px',
+                    backgroundColor: '#2a2a2a',
+                    borderRadius: '4px',
+                    textAlign: 'center'
+                }}>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-around',
+                        alignItems: 'center'
+                    }}>
+                        <div>
+                            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#007bff' }}>
+                                {data.total_games}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#aaa' }}>
+                                Total Games
+                            </div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#28a745' }}>
+                                {data.ratings.filter(g => g.status === 'FINISHED').length}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#aaa' }}>
+                                Finished
+                            </div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#6c757d' }}>
+                                {data.ratings.filter(g => g.status === 'SKIPPED').length}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#aaa' }}>
+                                Skipped
+                            </div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ffc107' }}>
+                                {data.ratings.filter(g => g.status === 'FINISHED').length > 0 ? (data.ratings.filter(g => g.status === 'FINISHED').reduce((sum, game) => sum + game.rating, 0) / data.ratings.filter(g => g.status === 'FINISHED').length).toFixed(1) : '0.0'}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#aaa' }}>
+                                Avg Finished Rating
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </ModalRoot>
+    );
+};
+
 const MAIN_WINDOW_NAME = "SP Desktop_uid0";
 
 async function OnPopupCreation(popup: globals.SteamPopup) {
     await debug_log({ message: `OnPopupCreation called with popup: ${popup?.m_strName}` });
-    
+
     if (popup.m_strName !== MAIN_WINDOW_NAME) {
         await debug_log({ message: `Not main popup, ignoring: ${popup?.m_strName}` });
         return;
     }
 
     await debug_log({ message: "Main popup detected, initializing..." });
+
+    // Логируем только основные события для отладки
+    await debug_log({ message: "Steam Game Helper plugin initialized" });
+
+    // Добавляем пункт меню "Game Helper" в основную панель навигации Steam
+    try {
+        await debug_log({ message: "Adding Game Helper menu item to Steam navbar..." });
+
+        // Ищем существующие элементы меню для анализа структуры
+        const existingMenuItems = popup.m_popup.document.querySelectorAll('._2Lu3d-5qLmW4i19ysTt2jT._2UyOBeiSdBayaFdRa39N2O');
+
+        if (existingMenuItems.length > 0) {
+            await debug_log({ message: `Found ${existingMenuItems.length} existing menu items` });
+
+            // Берем последний элемент меню (обычно "Справка") как ориентир
+            const lastMenuItem = existingMenuItems[existingMenuItems.length - 1];
+            const parentContainer = lastMenuItem.parentNode;
+
+            // Проверяем, не существует ли уже пункт меню Game Helper
+            const existingGameHelperItem = parentContainer.querySelector('.game-helper-menu-item');
+            if (existingGameHelperItem) {
+                await debug_log({ message: "Game Helper menu item already exists" });
+                return;
+            }
+
+            // Создаем новый пункт меню Game Helper по точно такой же структуре
+            const gameHelperItem = popup.m_popup.document.createElement("div");
+            gameHelperItem.className = "_2Lu3d-5qLmW4i19ysTt2jT _2UyOBeiSdBayaFdRa39N2O game-helper-menu-item";
+
+            // Копируем стили из существующего элемента меню
+            const referenceItem = existingMenuItems[0];
+            if (referenceItem) {
+                const computedStyle = window.getComputedStyle(referenceItem);
+                gameHelperItem.style.cssText = computedStyle.cssText;
+                gameHelperItem.style.cursor = 'pointer';
+                gameHelperItem.style.userSelect = 'none';
+            }
+
+            // Копируем внутреннюю структуру из существующего элемента меню
+            if (referenceItem && referenceItem.children.length > 0) {
+                const innerDiv = referenceItem.children[0].cloneNode(true) as HTMLElement;
+                const textElement = innerDiv.querySelector('.bSKGlAJG2UVWTsntEJY2v');
+                if (textElement) {
+                    textElement.textContent = 'Game Helper';
+                }
+                gameHelperItem.appendChild(innerDiv);
+            } else {
+                // Fallback структура
+                gameHelperItem.innerHTML = `
+                    <div class="">
+                        <div class="bSKGlAJG2UVWTsntEJY2v">Game Helper</div>
+                    </div>
+                `;
+            }
+
+            // Добавляем обработчик клика для показа меню (альтернатива контекстному меню)
+            gameHelperItem.addEventListener("click", async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                await debug_log({ message: "Game Helper menu clicked" });
+
+                // Показываем контекстное меню при обычном клике
+                showContextMenu(
+                    <Menu label="Game Helper">
+                        <MenuItem onClick={async () => {
+                            await debug_log({ message: "Rating menu clicked" });
+                            showModal(
+                                <GameRatingsModal onClose={() => {}} />,
+                                popup.m_popup.window,
+                                {
+                                    strTitle: "Game Ratings",
+                                    bHideMainWindowForPopouts: false,
+                                    bForcePopOut: true,
+                                    popupHeight: 800,
+                                    popupWidth: 1000
+                                }
+                            );
+                        }}>
+                            Rating
+                        </MenuItem>
+                    </Menu>,
+                    gameHelperItem,
+                    {
+                        bForcePopup: true,
+                        bOverlapHorizontal: true
+                    }
+                );
+            });
+
+            // Альтернативный обработчик - двойной клик для отладки
+            gameHelperItem.addEventListener("dblclick", async (event) => {
+                await debug_log({ message: "Game Helper double-click triggered (fallback)" });
+                showModal(
+                    <GameRatingsModal onClose={() => {}} />,
+                    popup.m_popup.window,
+                    {
+                        strTitle: "Game Ratings (Fallback)",
+                        bHideMainWindowForPopouts: false,
+                        bForcePopOut: true,
+                        popupHeight: 800,
+                        popupWidth: 1000
+                    }
+                );
+            });
+
+            // Вставляем новый пункт меню после последнего элемента
+            parentContainer.insertBefore(gameHelperItem, lastMenuItem.nextSibling);
+            await debug_log({ message: "Game Helper menu item added successfully" });
+        } else {
+            await debug_log({ message: "No existing menu items found, trying alternative approach" });
+
+            // Альтернативный подход - ищем контейнер по другому селектору
+            const navbarContainer = await WaitForElement(
+                '._1Ky59qmywxOUtNcI1cgmkX._3s0lkohH8wU2do0K1il28Y',
+                popup.m_popup.document,
+                5000
+            );
+
+            if (navbarContainer) {
+                // Создаем элемент меню
+                const gameHelperItem = popup.m_popup.document.createElement("div");
+                gameHelperItem.className = "_2Lu3d-5qLmW4i19ysTt2jT _2UyOBeiSdBayaFdRa39N2O game-helper-menu-item";
+                gameHelperItem.innerHTML = `
+                    <div class="">
+                        <div class="bSKGlAJG2UVWTsntEJY2v">Game Helper</div>
+                    </div>
+                `;
+
+                // Добавляем контекстное меню
+                gameHelperItem.addEventListener("contextmenu", async (event) => {
+                    event.preventDefault();
+
+                    showContextMenu(
+                        <Menu label="Game Helper">
+                            <MenuItem onClick={async () => {
+                                showModal(
+                                    <GameRatingsModal onClose={() => {}} />,
+                                    popup.m_popup.window,
+                                    {
+                                        strTitle: "Game Ratings",
+                                        bHideMainWindowForPopouts: false,
+                                        bForcePopOut: true,
+                                        popupHeight: 800,
+                                        popupWidth: 1000
+                                    }
+                                );
+                            }}>
+                                Rating
+                            </MenuItem>
+                        </Menu>
+                    );
+                });
+
+                navbarContainer.appendChild(gameHelperItem);
+                await debug_log({ message: "Game Helper menu item added via alternative method" });
+            } else {
+                await debug_log({ message: "Warning: Could not find navbar container" });
+            }
+        }
+    } catch (error) {
+        await debug_log({ message: `Error adding Game Helper menu: ${error}` });
+    }
     
     // Ждем готовности MainWindowBrowserManager
     var mwbm = undefined;
     while (!mwbm) {
-        await debug_log({ message: "Waiting for MainWindowBrowserManager" });
         try {
             mwbm = MainWindowBrowserManager;
-            await debug_log({ message: "MainWindowBrowserManager found" });
         } catch (e) {
-            await debug_log({ message: `MainWindowBrowserManager not ready yet: ${e}` });
             await sleep(100);
         }
     }
 
-    await debug_log({ message: "Setting up browser event listener" });
-
     // Обработчик навигации по страницам
     MainWindowBrowserManager.m_browser.on("finished-request", async (currentURL, previousURL) => {
         const currentPath = MainWindowBrowserManager.m_lastLocation.pathname;
-        await debug_log({ message: `Browser navigation detected. Path: ${currentPath}, Previous: ${previousURL}` });
-        
+
         // Добавляем кнопку обзора только на страницах игр
         if (currentPath.startsWith("/library/app/")) {
-            await debug_log({ message: "Game page detected, processing..." });
-            
             const appIdMatch = currentPath.match(/\/library\/app\/(\d+)/);
-            await debug_log({ message: `AppId match result: ${JSON.stringify(appIdMatch)}` });
-            
+
             if (appIdMatch) {
                 const appId = parseInt(appIdMatch[1]);
-                await debug_log({ message: `Extracted appId: ${appId}` });
-                
+
                 try {
-                    // Ищем кнопку настроек игры (как в примере)
-                    await debug_log({ message: "Looking for game settings button..." });
-                    
+                    // Ищем кнопку настроек игры
                     const gameSettingsButton = await WaitForElement(`div.${findModule(e => e.InPage).InPage} div.${findModule(e => e.AppButtonsContainer).AppButtonsContainer} > div.${findModule(e => e.MenuButtonContainer).MenuButtonContainer}:not([role="button"])`, popup.m_popup.document);
-                    
-                    await debug_log({ message: `Game settings button found: ${!!gameSettingsButton}` });
-                    
+
                     if (gameSettingsButton) {
-                        await debug_log({ message: `Game settings button parent: ${!!gameSettingsButton.parentNode}` });
-                        
-                        // Проверяем, не существует ли уже кнопка обзора (используем уникальное имя класса)
+                        // Проверяем, не существует ли уже кнопка обзора
                         const existingReviewButton = gameSettingsButton.parentNode.querySelector('div.steam-game-helper-review-button');
-                        await debug_log({ message: `Existing review button check: ${!!existingReviewButton}` });
-                        
+
                         if (!existingReviewButton) {
-                            await debug_log({ message: "Creating review button..." });
-                            
-                            // Создаем кнопку обзора по образцу примера
+                            // Создаем кнопку обзора
                             const reviewButton = gameSettingsButton.cloneNode(true) as HTMLElement;
-                            await debug_log({ message: `Review button cloned: ${!!reviewButton}` });
-                            
                             reviewButton.classList.add("steam-game-helper-review-button");
                             if (reviewButton.firstChild) {
                                 (reviewButton.firstChild as HTMLElement).innerHTML = "📝";
                             }
                             reviewButton.title = "Write Review";
-                            
-                            await debug_log({ message: "Review button configured, inserting..." });
-                            
+
                             gameSettingsButton.parentNode.insertBefore(reviewButton, gameSettingsButton.nextSibling);
-                            
-                            await debug_log({ message: "Review button inserted successfully" });
 
                             // Добавляем обработчик клика
                             reviewButton.addEventListener("click", async () => {
-                                await debug_log({ message: `Review button clicked for appId: ${appId}` });
-                                
                                 showModal(
-                                    <ReviewModal 
-                                        appId={appId} 
-                                        onClose={() => {
-                                            // Модальное окно закроется автоматически без сохранения
-                                        }} 
+                                    <ReviewModal
+                                        appId={appId}
+                                        onClose={() => {}}
                                     />,
-                                    popup.m_popup.window, 
-                                    { 
-                                        strTitle: "Game Review", 
-                                        bHideMainWindowForPopouts: false, 
-                                        bForcePopOut: true, 
-                                        popupHeight: 620, 
-                                        popupWidth: 600 
+                                    popup.m_popup.window,
+                                    {
+                                        strTitle: "Game Review",
+                                        bHideMainWindowForPopouts: false,
+                                        bForcePopOut: true,
+                                        popupHeight: 620,
+                                        popupWidth: 600
                                     }
                                 );
                             });
-                            
-                            await debug_log({ message: "Review button click handler added" });
-                        } else {
-                            await debug_log({ message: "Review button already exists, skipping creation" });
                         }
-                    } else {
-                        await debug_log({ message: "Game settings button not found" });
                     }
                 } catch (error) {
-                    await debug_log({ message: `Error processing game page: ${error}` });
+                    // Игнорируем ошибки
                 }
-            } else {
-                await debug_log({ message: "No appId found in path" });
             }
         } else if (currentPath.startsWith("/library/collection/")) {
             const collectionId = uiStore.currentGameListSelection.strCollectionId;
-            await debug_log({ message: `Found collectionId: ${collectionId}` });
-            
+
             try {
-                // Ищем кнопку настроек коллекции (аналогично кнопке настроек игры)
-                await debug_log({ message: "Looking for collection options button..." });
-                
+                // Ищем кнопку настроек коллекции
                 const collectionOptionsButton = await WaitForElement(`div.${findModule(e => e.CollectionOptions).CollectionOptions}`, popup.m_popup.document);
-                
-                await debug_log({ message: `Collection options button found: ${!!collectionOptionsButton}` });
-                
+
                 if (collectionOptionsButton) {
                     // Удаляем существующую кнопку колеса фортуны если она есть
                     const existingWheelButton = collectionOptionsButton.querySelector('button.steam-game-helper-wheel-button');
                     if (existingWheelButton) {
-                        await debug_log({ message: "Removing existing fortune wheel button" });
                         existingWheelButton.parentNode?.removeChild(existingWheelButton);
                     }
-                    
-                    await debug_log({ message: `Creating fortune wheel button for collection: ${collectionId}` });
-                    
+
                     // Создаем кнопку колеса фортуны
                     const wheelButton = popup.m_popup.document.createElement("div");
                     render(
-                        <DialogButton 
-                            className="steam-game-helper-wheel-button" 
+                        <DialogButton
+                            className="steam-game-helper-wheel-button"
                             style={{
-                                width: "40px", 
-                                marginLeft: "3px", 
+                                width: "40px",
+                                marginLeft: "3px",
                                 marginRight: "3px",
                                 color: 'white',
                                 border: 'none',
@@ -905,37 +1428,19 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                             }}
                         >
                             🎯
-                        </DialogButton>, 
+                        </DialogButton>,
                         wheelButton
                     );
-                    
-                    collectionOptionsButton.insertBefore(wheelButton, collectionOptionsButton.firstChild.nextSibling);
-                    
-                    await debug_log({ message: "Fortune wheel button inserted successfully" });
 
-                    // Добавляем обработчик клика с замыканием на текущий collectionId
+                    collectionOptionsButton.insertBefore(wheelButton, collectionOptionsButton.firstChild.nextSibling);
+
+                    // Добавляем обработчик клика
                     wheelButton.addEventListener("click", async () => {
-                        await debug_log({ message: `Fortune wheel button clicked for collection: ${collectionId}` });
-                        
                         try {
                             // Получаем список игр из коллекции
                             const collection = collectionStore.GetCollection(collectionId.replace('%20', ' '));
-                            await debug_log({ message: `Collection found: ${!!collection}` });
-                            await debug_log({ message: `Games found: ${JSON.stringify(collection.allApps)}` });
-                            
-                            if (collection && collection.allApps) {
-                                // Проверяем, есть ли параметр installed у игр
-                                const sampleApp = collection.allApps[0];
-                                if (sampleApp) {
-                                    await debug_log({ message: `Sample app properties: ${Object.keys(sampleApp).join(', ')}` });
-                                    if (sampleApp.installed !== undefined) {
-                                        await debug_log({ message: `Sample app installed status: ${sampleApp.installed}` });
-                                    }
-                                    if (sampleApp.per_client_data) {
-                                        await debug_log({ message: `Sample app per_client_data: ${JSON.stringify(sampleApp.per_client_data)}` });
-                                    }
-                                }
 
+                            if (collection && collection.allApps) {
                                 const games: GameInfo[] = collection.allApps
                                 .map((app: any) => ({
                                     appid: app.appid,
@@ -944,77 +1449,43 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                                     installed: app.installed || (app.per_client_data && app.per_client_data.installed)
                                 }));
 
-                                await debug_log({ message: `Found ${games.length} games in collection ${collectionId}` });
-
                                 if (games.length > 0) {
-                                    // Проверяем, есть ли хотя бы одна установленная игра при фильтре "только установленные"
-                                    const installedGames = games.filter(g => g.installed);
-                                    if (installedGames.length === 0) {
-                                        await debug_log({ message: "No installed games found in collection, showing all games by default" });
-                                    }
                                     showModal(
-                                        <FortuneWheelModal 
+                                        <FortuneWheelModal
                                             key={`fortune-wheel-${collectionId}-${Date.now()}`}
-                                            games={games} 
-                                            onClose={() => {
-                                                // Модальное окно закроется автоматически
-                                            }} 
+                                            games={games}
+                                            onClose={() => {}}
                                         />,
-                                        popup.m_popup.window, 
-                                        { 
-                                            strTitle: `Fortune Wheel - ${collectionId}`, 
-                                            bHideMainWindowForPopouts: false, 
-                                            bForcePopOut: true, 
-                                            popupHeight: 734, 
-                                            popupWidth: 990 
+                                        popup.m_popup.window,
+                                        {
+                                            strTitle: `Fortune Wheel - ${collectionId}`,
+                                            bHideMainWindowForPopouts: false,
+                                            bForcePopOut: true,
+                                            popupHeight: 734,
+                                            popupWidth: 990
                                         }
                                     );
-                                } else {
-                                    await debug_log({ message: "Collection is empty, cannot show fortune wheel" });
                                 }
-                            } else {
-                                await debug_log({ message: "Collection not found or has no games" });
                             }
                         } catch (error) {
-                            await debug_log({ message: `Error getting collection games: ${error}` });
+                            // Игнорируем ошибки
                         }
                     });
-                    
-                    await debug_log({ message: "Fortune wheel button click handler added" });
-                } else {
-                    await debug_log({ message: "Collection options button not found" });
                 }
             } catch (error) {
-                await debug_log({ message: `Error processing collection page: ${error}` });
+                // Игнорируем ошибки
             }
-        } else {
-            await debug_log({ message: "Not a game or collection page, skipping" });
         }
     });
-    
-    await debug_log({ message: "Browser event listener setup complete" });
 }
 
 export default async function PluginMain() {
-    await debug_log({ message: "Frontend startup" });
-    
-    await debug_log({ message: "Waiting for services to initialize..." });
-    
     await App.WaitForServicesInitialized();
-    
-    await debug_log({ message: "Services initialized, checking for existing popup..." });
 
     const doc = g_PopupManager.GetExistingPopup(MAIN_WINDOW_NAME);
-    await debug_log({ message: `Existing popup found: ${!!doc}` });
-    
 	if (doc) {
-        await debug_log({ message: "Processing existing popup..." });
 		OnPopupCreation(doc);
 	}
 
-    await debug_log({ message: "Adding popup creation callback..." });
-    
 	g_PopupManager.AddPopupCreatedCallback(OnPopupCreation);
-	
-	await debug_log({ message: "Plugin initialization complete" });
 }
