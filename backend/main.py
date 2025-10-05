@@ -246,6 +246,8 @@ class Backend:
             if timestamp > 0:
                 year = datetime.fromtimestamp(timestamp, tz=timezone.utc).year
                 years.add(year)
+            
+            substracted_review = review_data.get('review', '')[:30] + '...' if len(review_data.get('review', '')) > 30 else review_data.get('review', '')
 
             all_ratings.append({
                 'app_id': app_id,
@@ -253,7 +255,7 @@ class Backend:
                 'icon_hash': review_data.get('icon_hash', None),
                 'rating': review_data['rating'] if 'rating' in review_data else 1,
                 'status': review_data.get('status', 'UNKNOWN'),
-                'review': review_data.get('review', ''),
+                'review': substracted_review,
                 'created_at': created_at,
                 'finished_at': finished_at,
                 'year': year if timestamp > 0 else None

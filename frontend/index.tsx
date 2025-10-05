@@ -451,6 +451,15 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
     const [deleted, setDeleted] = useState<boolean>(false);
     const [originalData, setOriginalData] = useState<any>(null);
 
+    // Автоматически устанавливаем текущую дату при изменении статуса на FINISHED или SKIPPED
+    useEffect(() => {
+        if ((status === 'FINISHED' || status === 'SKIPPED') && !finishedDate) {
+            const today = new Date();
+            const dateString = today.toISOString().split('T')[0];
+            setFinishedDate(dateString);
+        }
+    }, [status, finishedDate]);
+
     // Загружаем существующий обзор при открытии модального окна
     useEffect(() => {
         const loadReview = async () => {
@@ -512,10 +521,10 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                 status: status
             };
 
-            // Добавляем дату прохождения только если статус FINISHED
-            if (status === 'FINISHED' && finishedDate) {
+            // Добавляем дату прохождения для всех статусов кроме IN_PROGRESS
+            if (finishedDate && status !== 'IN_PROGRESS') {
                 reviewData.finished_at_formatted = finishedDate;
-                await debug_log({ message: `Adding finished date: ${finishedDate}` });
+                await debug_log({ message: `Adding finished date: ${finishedDate} for status: ${status}` });
             }
 
             const collectionGames = collectionStore.GetCollection(uiStore.currentGameListSelection.strCollectionId);
@@ -613,12 +622,21 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
 
     return (
         <ModalRoot closeModal={onClose}>
-            <div style={{ padding: '10px', minWidth: '500px' }}>
-                <h2 style={{ marginBottom: '20px' }}>Game Review</h2>
+            <div style={{
+                padding: '10px',
+                minWidth: '500px',
+                minHeight: '500px',
+                maxHeight: '80vh',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                overflowY: 'auto'
+            }}>
+                <h2 style={{ margin: 0, marginBottom: '20px' }}>Game Review</h2>
                 
                 {/* Поле для текста обзора */}
-                <div style={{ marginBottom: '15px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '14px' }}>
                         Review:
                     </label>
                     <textarea
@@ -629,17 +647,20 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                             width: '95%',
                             height: '120px',
                             padding: '8px',
-                            border: '1px solid #ccc',
+                            border: '1px solid #444',
                             borderRadius: '4px',
+                            backgroundColor: '#2a2a2a',
+                            color: '#fff',
                             resize: 'vertical',
-                            fontFamily: 'inherit'
+                            fontFamily: 'inherit',
+                            fontSize: '14px'
                         }}
                     />
                 </div>
 
                 {/* Поле для оценки */}
                 <div style={{ marginBottom: '15px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', fontSize: '14px' }}>
                         Rating (1-5):
                     </label>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -652,17 +673,18 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                             onChange={(e) => setRating(parseFloat(e.target.value))}
                             style={{
                                 flex: 1,
-                                height: '20px',
-                                background: `background: linear-gradient(15deg, red, green)`,
+                                height: '6px',
+                                background: 'linear-gradient(to right, #dc3545, #ffc107, #28a745)',
                                 outline: 'none',
-                                borderRadius: '10px',
+                                borderRadius: '3px',
                                 cursor: 'pointer'
                             }}
                         />
-                        <span style={{ 
-                            minWidth: '60px', 
+                        <span style={{
+                            minWidth: '60px',
                             textAlign: 'center',
                             fontWeight: 'bold',
+                            fontSize: '16px',
                             color: getRatingColor(rating || 1)
                         }}>
                             {rating > 0 ? `${rating}/5` : '1/5'}
@@ -670,93 +692,119 @@ const ReviewModal: React.FC<{ appId: number, onClose: () => void }> = ({ appId, 
                     </div>
                 </div>
 
-                {/* Поле для статуса игры */}
-                <div style={{ marginBottom: '15px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                        Game Status:
-                    </label>
-                    <select
-                        value={status}
-                        onChange={(e) => setStatus(e.target.value)}
-                        style={{
-                            width: '97%',
-                            padding: '8px',
-                            border: '1px solid #ccc',
-                            borderRadius: '4px',
-                            fontSize: '14px'
-                        }}
-                    >
-                        {GAME_STATUS_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
+                {/* Поле для статуса игры и даты */}
+                <div style={{ marginBottom: '30px' }}>
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-end' }}>
+                        {/* Селектор статуса */}
+                        <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
+                                Game Status:
+                            </label>
+                            <select
+                                value={status}
+                                onChange={(e) => setStatus(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '10px',
+                                    border: '1px solid #444',
+                                    borderRadius: '4px',
+                                    backgroundColor: '#2a2a2a',
+                                    color: '#fff',
+                                    fontSize: '14px'
+                                }}
+                            >
+                                {GAME_STATUS_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Кнопка даты */}
+                        {(status === 'FINISHED' || status === 'SKIPPED') && (
+                            <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
+                                    {status === 'FINISHED' ? 'Finished Date:' : 'Skipped Date:'}
+                                </label>
+                                <input
+                                    type="date"
+                                    value={finishedDate}
+                                    onChange={(e) => setFinishedDate(e.target.value)}
+                                    style={{
+                                        width: '95%',
+                                        padding: '10px',
+                                        border: '1px solid #444',
+                                        borderRadius: '4px',
+                                        backgroundColor: '#2a2a2a',
+                                        color: '#fff',
+                                        fontSize: '14px'
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        {/* Кнопка даты для IN_PROGRESS */}
+                        {status === 'IN_PROGRESS' && (
+                            <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '14px' }}>
+                                    Started Date:
+                                </label>
+                                <div
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        border: '1px solid #666',
+                                        borderRadius: '4px',
+                                        backgroundColor: '#666',
+                                        color: '#ccc',
+                                        fontSize: '14px',
+                                        textAlign: 'center'
+                                    }}
+                                >
+                                    {finishedDate ? new Date(finishedDate).toLocaleDateString() : 'Not started'}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-
-                {/* Поле для даты прохождения - только если статус FINISHED */}
-                {status === 'FINISHED' && (
-                    <div style={{ marginBottom: '15px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                            Finished Date:
-                        </label>
-                        <input
-                            type="date"
-                            value={finishedDate}
-                            onChange={(e) => setFinishedDate(e.target.value)}
-                            style={{
-                                width: '95%',
-                                padding: '8px',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                fontSize: '14px'
-                            }}
-                        />
-                    </div>
-                )}
-
                 {/* Кнопки управления */}
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                    <DialogButton 
+                <div style={{
+                    display: 'flex',
+                    gap: '10px',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    
+                }}>
+                    <DialogButton
                         onClick={handleSave}
                         disabled={saving || !hasChanges()}
-                        style={{ 
-                            backgroundColor: saved ? '#28a745' : '#007bff', 
+                        style={{
+                            backgroundColor: saved ? '#28a745' : '#007bff',
                             color: 'white',
                             border: 'none',
-                            padding: '8px 12px',
+                            padding: '10px 20px',
                             borderRadius: '4px',
                             cursor: (saving || !hasChanges()) ? 'not-allowed' : 'pointer',
                             opacity: (saving || !hasChanges()) ? 0.6 : 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '85%',
-                            height: '30px',
                             fontSize: '14px',
-                            gap: '5px'
+                            fontWeight: 'bold'
                         }}
                     >
                         {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save'}
                     </DialogButton>
-                    <button  
+                    <button
                         onClick={handleDelete}
-                        style={{ 
-                            backgroundColor: deleted ? '#28a745' : '#dc3545', 
+                        style={{
+                            backgroundColor: deleted ? '#28a745' : '#dc3545',
                             color: 'white',
                             border: 'none',
-                            padding: '8px 12px',
+                            padding: '15px 20px',
                             borderRadius: '4px',
-                            fontSize: '14px',
-                            width: '15%',
-                            height: '45px',
                             cursor: 'pointer',
-                            
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '5px'
+                            fontSize: '14px',
+                            fontWeight: 'bold'
                         }}
                         title={deleted ? "Review deleted" : "Delete review"}
                     >
@@ -1096,7 +1144,12 @@ const GameRatingsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                                                     fontSize: '11px',
                                                     color: '#888'
                                                 }}>
-                                                    {game.finished_at ? `Finished: ${formatDate(game.finished_at)}` : ''}
+                                                    {game.finished_at 
+                                                        ? game.status === 'FINISHED' 
+                                                            ? `Finished: ${formatDate(game.finished_at)}` 
+                                                            : `Skipped: ${formatDate(game.finished_at)}` 
+                                                        : ''
+                                                    }
                                                 </div>
                                             </div>
                                         </div>
@@ -1385,7 +1438,7 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                                         strTitle: "Game Review",
                                         bHideMainWindowForPopouts: false,
                                         bForcePopOut: true,
-                                        popupHeight: 620,
+                                        popupHeight: 580,
                                         popupWidth: 600
                                     }
                                 );
