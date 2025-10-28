@@ -18,6 +18,7 @@ const delete_review = callable<[{ app_id: number }], boolean>('Backend.delete_re
 const debug_log = callable<[{ message: string }], boolean>('Backend.debug_log');
 const get_game_image_base64 = callable<[{ app_id: string, file_name: string }], string | null>('Backend.get_game_image_base64');
 const get_game_ratings = callable<[{ show_all_games?: boolean, selected_year?: string | number }], string>('Backend.get_game_ratings');
+const get_current_year = callable<[{}], string>('Backend.def get_current_year');
 
 const WaitForElement = async (sel: string, parent = document) =>
 	[...(await Millennium.findElement(parent, sel))][0];
@@ -109,6 +110,17 @@ interface GameInfo {
     display_name: string;
     header_filename?: string;
     installed?: boolean;
+}
+
+// Интерфейс для рейтинга игры
+interface GameRating {
+    app_id: number;
+    display_name: string;
+    rating: number;
+    review: string;
+    status: string;
+    finished_at?: number;
+    icon_hash?: string;
 }
 
 // Компонент колеса фортуны
@@ -1304,11 +1316,7 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                             Rating
                         </MenuItem>
                     </Menu>,
-                    gameHelperItem,
-                    {
-                        bForcePopup: true,
-                        bOverlapHorizontal: true
-                    }
+                    gameHelperItem
                 );
             });
 
@@ -1335,7 +1343,7 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
             await debug_log({ message: "No existing menu items found, trying alternative approach" });
 
             // Альтернативный подход - ищем контейнер по другому селектору
-            const navbarContainer = await WaitForElement(
+            const navbarContainer = await WaitForElementTimeout(
                 '._1Ky59qmywxOUtNcI1cgmkX._3s0lkohH8wU2do0K1il28Y',
                 popup.m_popup.document,
                 5000

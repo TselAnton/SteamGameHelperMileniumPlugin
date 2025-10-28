@@ -277,7 +277,7 @@ class Backend:
                 logger.log(f"Invalid selected_year value: {selected_year}")
 
         # Группируем по статусам в нужном порядке
-        status_order = ['FINISHED', 'SKIPPED', 'IN_PROGRESS']
+        status_order = ['IN_PROGRESS', 'FINISHED', 'SKIPPED']
         grouped_by_status = {}
 
         for rating in ratings:
