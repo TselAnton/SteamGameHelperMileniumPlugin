@@ -1407,6 +1407,7 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
     // Обработчик навигации по страницам
     MainWindowBrowserManager.m_browser.on("finished-request", async (currentURL, previousURL) => {
         const currentPath = MainWindowBrowserManager.m_lastLocation.pathname;
+        await debug_log({ message: `Current path: ${currentPath}` });
 
         // Добавляем кнопку обзора только на страницах игр
         if (currentPath.startsWith("/library/app/")) {
@@ -1459,6 +1460,9 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
             }
         } else if (currentPath.startsWith("/library/collection/")) {
             const collectionId = uiStore.currentGameListSelection.strCollectionId;
+
+            await debug_log({ message: `Into library collection. CollectionID: ${collectionId}` });
+            await debug_log({ message: `PopupDocument: ${JSON.stringify(popup.m_popup.document)}` });
 
             try {
                 // Ищем кнопку настроек коллекции

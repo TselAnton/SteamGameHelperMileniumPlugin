@@ -16,7 +16,7 @@ reviews_db = {}
 
 def get_reviews_db_fname():
     """Получить путь к файлу базы данных обзоров"""
-    return os.path.join(PLUGIN_BASE_DIR, "reviews_db.json")
+    return os.path.join(PLUGIN_BASE_DIR.replace("/plugins/my-steam-game-helper-plugin", ""), "reviews_db.json")
 
 def load_reviews_db():
     """Загрузить базу данных обзоров из файла"""
@@ -272,7 +272,7 @@ class Backend:
         if selected_year and selected_year != 'all':
             try:
                 target_year = int(selected_year)
-                ratings = [r for r in ratings if r['year'] == target_year]
+                ratings = [r for r in ratings if r['year'] == target_year or r['status'] in ['IN_PROGRESS']]
             except (ValueError, TypeError):
                 logger.log(f"Invalid selected_year value: {selected_year}")
 
@@ -291,7 +291,7 @@ class Backend:
             grouped_by_status[status].sort(key=lambda x: x['rating'], reverse=True)
 
         # Сортируем года от меньшего к большему
-        sorted_years = sorted(years)
+        sorted_years = sorted(years, reverse=True)
 
         result = {
             'all_ratings': all_ratings,  # Все рейтинги для статистики
@@ -365,11 +365,12 @@ class Backend:
             return None
 
 class Plugin:
+
     def _front_end_loaded(self):
         logger.log("Frontend loaded")
 
     def _load(self):
-        logger.log(f"Plugin base dir: {PLUGIN_BASE_DIR}")
+        logger.log(f"Plugin base dir: {get_reviews_db_fname()}")
 
         # Загружаем базу данных обзоров
         load_reviews_db()
