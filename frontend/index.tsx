@@ -1462,50 +1462,93 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
             const collectionId = uiStore.currentGameListSelection.strCollectionId;
 
             await debug_log({ message: `Into library collection. CollectionID: ${collectionId}` });
-            await debug_log({ message: `PopupDocument: ${JSON.stringify(popup.m_popup.document)}` });
+            await debug_log({ message: `Current path: ${currentPath}, CollectionID: ${collectionId}` });
 
             try {
-                // Ищем кнопку настроек коллекции
-                const collectionOptionsButton = await WaitForElement(`div.${findModule(e => e.CollectionOptions).CollectionOptions}`, popup.m_popup.document);
+                // Получаем модуль CollectionOptions для селектора
+                let collectionOptionsModule;
+                try {
+                    collectionOptionsModule = findModule(e => e.CollectionOptions);
+                    await debug_log({ message: `CollectionOptions module found: ${collectionOptionsModule ? 'yes' : 'no'}` });
+                    if (collectionOptionsModule) {
+                        await debug_log({ message: `CollectionOptions class name: ${collectionOptionsModule.CollectionOptions}` });
+                    }
+                } catch (moduleError) {
+                    await debug_log({ message: `Error finding CollectionOptions module: ${moduleError}` });
+                }
+
+                // Ищем кнопку настроек коллекции с таймаутом
+                const selector = collectionOptionsModule ? `div.${collectionOptionsModule.CollectionOptions}` : null;
+                if (!selector) {
+                    await debug_log({ message: `Cannot create selector for CollectionOptions` });
+                    return;
+                }
+
+                await debug_log({ message: `Searching for element with selector: ${selector}` });
+                
+                // Используем WaitForElementTimeout с большим таймаутом (10 секунд)
+                const collectionOptionsButton = await WaitForElementTimeout(selector, popup.m_popup.document, 10000);
 
                 if (collectionOptionsButton) {
+                    await debug_log({ message: `CollectionOptions button found!` });
+                    
                     // Удаляем существующую кнопку колеса фортуны если она есть
-                    const existingWheelButton = collectionOptionsButton.querySelector('button.steam-game-helper-wheel-button');
+                    const existingWheelButton = collectionOptionsButton.querySelector('button.steam-game-helper-wheel-button, div.steam-game-helper-wheel-button');
                     if (existingWheelButton) {
+                        await debug_log({ message: `Removing existing wheel button` });
                         existingWheelButton.parentNode?.removeChild(existingWheelButton);
                     }
 
-                    // Создаем кнопку колеса фортуны
-                    const wheelButton = popup.m_popup.document.createElement("div");
-                    render(
-                        <DialogButton
-                            className="steam-game-helper-wheel-button"
-                            style={{
-                                width: "40px",
-                                marginLeft: "3px",
-                                marginRight: "3px",
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                fontWeight: 'bold'
-                            }}
-                        >
-                            🎯
-                        </DialogButton>,
-                        wheelButton
-                    );
+                    // Создаем кнопку колеса фортуны через DOM API
+                    // Используем прямой подход, так как render из react-dom может не работать после обновления Steam
+                    const wheelButton = popup.m_popup.document.createElement("button");
+                    wheelButton.className = "steam-game-helper-wheel-button";
+                    wheelButton.textContent = "🎯";
+                    wheelButton.setAttribute("role", "button");
+                    wheelButton.style.cssText = `
+                        width: 30px;
+                        height: 20px;
+                        margin-left: 3px;
+                        margin-right: 3px;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        font-weight: bold;
+                        background-color: #3F4858;
+                        padding: 8px;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                    `;
+                    
+                    await debug_log({ message: `Wheel button created via DOM API` });
 
-                    collectionOptionsButton.insertBefore(wheelButton, collectionOptionsButton.firstChild.nextSibling);
+                    // Проверяем структуру элемента перед вставкой
+                    if (collectionOptionsButton.firstChild && collectionOptionsButton.firstChild.nextSibling) {
+                        collectionOptionsButton.insertBefore(wheelButton, collectionOptionsButton.firstChild.nextSibling);
+                    } else {
+                        // Fallback: добавляем в конец, если структура неожиданная
+                        collectionOptionsButton.appendChild(wheelButton);
+                    }
+
+                    await debug_log({ message: `Wheel button inserted successfully` });
 
                     // Добавляем обработчик клика
                     wheelButton.addEventListener("click", async () => {
                         try {
+                            await debug_log({ message: `Wheel button clicked for collection: ${collectionId}` });
+                            
                             // Получаем список игр из коллекции
-                            const collection = collectionStore.GetCollection(collectionId.replace('%20', ' '));
+                            const normalizedCollectionId = collectionId.replace('%20', ' ');
+                            await debug_log({ message: `Getting collection with ID: ${normalizedCollectionId}` });
+                            
+                            const collection = collectionStore.GetCollection(normalizedCollectionId);
 
                             if (collection && collection.allApps) {
+                                await debug_log({ message: `Collection found with ${collection.allApps.length} games` });
+                                
                                 const games: GameInfo[] = collection.allApps
                                 .map((app: any) => ({
                                     appid: app.appid,
@@ -1515,6 +1558,7 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                                 }));
 
                                 if (games.length > 0) {
+                                    await debug_log({ message: `Opening fortune wheel modal with ${games.length} games` });
                                     showModal(
                                         <FortuneWheelModal
                                             key={`fortune-wheel-${collectionId}-${Date.now()}`}
@@ -1530,15 +1574,21 @@ async function OnPopupCreation(popup: globals.SteamPopup) {
                                             popupWidth: 990
                                         }
                                     );
+                                } else {
+                                    await debug_log({ message: `No games found in collection` });
                                 }
+                            } else {
+                                await debug_log({ message: `Collection not found or has no allApps property` });
                             }
                         } catch (error) {
-                            // Игнорируем ошибки
+                            await debug_log({ message: `Error in wheel button click handler: ${error}` });
                         }
                     });
+                } else {
+                    await debug_log({ message: `CollectionOptions button not found after timeout` });
                 }
             } catch (error) {
-                // Игнорируем ошибки
+                await debug_log({ message: `Error in collection page handler: ${error}` });
             }
         }
     });
